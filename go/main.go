@@ -57,7 +57,7 @@ func main() {
 	// Subscribe to stream
 	subscribeMessage := map[string]interface{}{
 		"action": "subscribe",
-		"trades": []string{"FAKEPACA"},
+		"bars":   []string{"FAKEPACA"}, // change this to * for all symbols
 	}
 	if err := conn.WriteJSON(subscribeMessage); err != nil {
 		log.Fatalf("Subscription error: %v", err)
