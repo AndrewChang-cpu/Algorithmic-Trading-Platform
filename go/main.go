@@ -5,13 +5,21 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Kafka producer configuration
+	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
+	if err != nil {
+		log.Fatalf("Error creating Kafka producer: %v", err)
+	}
+	defer producer.Close()
+
 	// Load environment variables from .env file
-	err := godotenv.Load()
+	err = godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
@@ -71,5 +79,19 @@ func main() {
 			return
 		}
 		log.Printf("Received: %s", message)
+
+		// Produce the WebSocket message to Kafka
+		kafkaMessage := &sarama.ProducerMessage{
+			Topic: "stock_data",
+			Key:   sarama.StringEncoder("S"),
+			Value: sarama.StringEncoder(string(message)),
+		}
+
+		partition, offset, err := producer.SendMessage(kafkaMessage)
+		if err != nil {
+			log.Printf("Error sending message to Kafka: %v", err)
+		} else {
+			log.Printf("Message sent to partition %d at offset %d", partition, offset)
+		}
 	}
 }
