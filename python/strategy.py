@@ -11,7 +11,7 @@ import backtrader as bt
 from backtrader.utils import flushfile  # win32 quick stdout flushing
 
 # Import Confluent Kafka for Kafka consumer
-from confluent_kafka import Consumer, KafkaError, TopicPartition
+from confluent_kafka import Producer, Consumer, KafkaError, TopicPartition
 import json
 
 ###############################################################################
@@ -132,6 +132,11 @@ class TestStrategy(bt.Strategy):
         self.sma = bt.indicators.SimpleMovingAverage(self.data.close, period=self.p.smaperiod)
         self.datastatus = 1
 
+        # Initialize Kafka producer
+        self.kafka_producer = Producer({
+            'bootstrap.servers': 'localhost:9092'  # Replace with your Kafka broker address
+        })
+
     def notify_data(self, data, status, *args, **kwargs):
         print('*' * 5, 'DATA NOTIF:', data._getstatusname(status), *args)
         if status == data.LIVE:
@@ -144,16 +149,39 @@ class TestStrategy(bt.Strategy):
 
     def next(self):
         print('CALLED 3')
-        print(f"Current Value: {self.broker.getvalue()}")
+
+        # Portfolio metrics
+        portfolio_value = self.broker.getvalue()
+        cash = self.broker.getcash()
+        position = self.broker.getposition(self.data)
+
+        print(f"Current Value: {portfolio_value}")
+        print(f"Current Cash: {cash}")
+        print(f"Position: {position}")
+
+        # Create a message to send to Kafka
+        message = {
+            'portfolio_value': portfolio_value,
+            'cash': cash,
+            'position_size': position.size,
+            'position_price': position.price,
+            'datetime': self.data.datetime.datetime(0).strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+
+        # Send message to Kafka topic 'portfolio_data'
+        self.kafka_producer.produce(
+            topic='portfolio_data',
+            value=json.dumps(message)
+        )
+        self.kafka_producer.flush()  # Ensure the message is sent
+
         if not self.datastatus:
             return  # Wait until data is live
 
         if not self.position:  # No position
-            if self.data.close[0] > self.sma[0]:
-                self.order = self.buy(size=self.p.stake)
+            self.order = self.buy(size=self.p.stake)
         else:  # Already in position
-            if self.data.close[0] < self.sma[0]:
-                self.order = self.sell(size=self.p.stake)
+            self.order = self.sell(size=self.p.stake)
 
     def stop(self):
         # Show final portfolio metrics
@@ -172,6 +200,7 @@ def runstrategy():
     cerebro = bt.Cerebro()
 
     # Add the custom Kafka data feed (or any other feed)
+    print('Consumer Group:', args.kafka_group)
     kafka_feed = KafkaDataFeed(
         topic=args.kafka_topic,
         consumer_group=args.kafka_group,
@@ -208,7 +237,7 @@ def parse_args():
         description='Backtrader Pure Paper Trading Simulation'
     )
 
-    parser.add_argument('--kafka_topic', default='stock_data_topic',
+    parser.add_argument('--kafka_topic', default='stock_data',
                         required=False, action='store',
                         help='Kafka topic to consume stock data from')
 
