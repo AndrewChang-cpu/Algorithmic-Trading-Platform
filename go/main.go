@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/url"
 	"os"
@@ -80,18 +81,29 @@ func main() {
 		}
 		log.Printf("Received: %s", message)
 
-		// Produce the WebSocket message to Kafka
-		kafkaMessage := &sarama.ProducerMessage{
-			Topic: "stock_data",
-			Key:   sarama.StringEncoder("S"),
-			Value: sarama.StringEncoder(string(message)),
+		// Parse the message to check if "T" is "b"
+		var messages []map[string]interface{}
+		if err := json.Unmarshal(message, &messages); err != nil {
+			log.Printf("Error unmarshalling message: %v", err)
+			continue
 		}
 
-		partition, offset, err := producer.SendMessage(kafkaMessage)
-		if err != nil {
-			log.Printf("Error sending message to Kafka: %v", err)
-		} else {
-			log.Printf("Message sent to partition %d at offset %d", partition, offset)
+		for _, msg := range messages {
+			if msg["T"] == "b" {
+				// Produce the WebSocket message to Kafka
+				kafkaMessage := &sarama.ProducerMessage{
+					Topic: "stock_data",
+					Key:   sarama.StringEncoder("S"),
+					Value: sarama.StringEncoder(string(message)),
+				}
+
+				partition, offset, err := producer.SendMessage(kafkaMessage)
+				if err != nil {
+					log.Printf("Error sending message to Kafka: %v", err)
+				} else {
+					log.Printf("Message sent to partition %d at offset %d", partition, offset)
+				}
+			}
 		}
 	}
 }
