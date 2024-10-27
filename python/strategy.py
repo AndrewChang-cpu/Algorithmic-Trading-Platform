@@ -121,7 +121,6 @@ class KafkaDataFeed(bt.feeds.DataBase):
 
 class TestStrategy(bt.Strategy):
     params = dict(
-        smaperiod=2,
         stake=10,
     )
 
@@ -210,7 +209,7 @@ def runstrategy():
     cerebro.adddata(kafka_feed)
 
     # Add the strategy
-    cerebro.addstrategy(TestStrategy, smaperiod=args.smaperiod, stake=args.stake)
+    cerebro.addstrategy(TestStrategy, stake=args.stake)
 
     # Set initial cash (for paper trading)
     cerebro.broker.setcash(100000.0)  # Set your initial paper trading capital
