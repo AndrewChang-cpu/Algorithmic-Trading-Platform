@@ -123,32 +123,31 @@ class TestStrategy(bt.Strategy):
     params = dict(
         smaperiod=2,
         stake=10,
-        stopafter=0,
     )
 
     def __init__(self):
-        print('CALLED 1')
+        print('CALLED __init__')
         self.order = None
-        self.sma = bt.indicators.SimpleMovingAverage(self.data.close, period=self.p.smaperiod)
+        # self.sma = bt.indicators.SimpleMovingAverage(self.data.close, period=self.p.smaperiod)
         self.datastatus = 1
 
         # Initialize Kafka producer
         self.kafka_producer = Producer({
-            'bootstrap.servers': 'localhost:9092'  # Replace with your Kafka broker address
+            'bootstrap.servers': 'localhost:9092'  # Kafka broker address
         })
 
     def notify_data(self, data, status, *args, **kwargs):
-        print('*' * 5, 'DATA NOTIF:', data._getstatusname(status), *args)
+        print('CALLED notify_data')
         if status == data.LIVE:
             self.datastatus = 1
 
     def notify_order(self, order):
-        print('CALLED 2')
+        print('CALLED notify_order')
         if order.status in [order.Completed, order.Canceled, order.Rejected]:
             self.order = None  # Reset order
 
     def next(self):
-        print('CALLED 3')
+        print('CALLED next')
 
         # Portfolio metrics
         portfolio_value = self.broker.getvalue()
@@ -184,6 +183,8 @@ class TestStrategy(bt.Strategy):
             self.order = self.sell(size=self.p.stake)
 
     def stop(self):
+        print('CALLED stop')
+        
         # Show final portfolio metrics
         print(f"Ending Value: {self.broker.getvalue()}")
         print(f"Final Cash: {self.broker.getcash()}")
@@ -215,7 +216,7 @@ def runstrategy():
     cerebro.broker.setcash(100000.0)  # Set your initial paper trading capital
 
     # Set commission (optional)
-    cerebro.broker.setcommission(commission=0.001)  # Set a custom commission rate if needed
+    cerebro.broker.setcommission(commission=0)  # Set a custom commission rate if needed
 
     # Run the strategy
     cerebro.run()
