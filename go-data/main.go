@@ -25,48 +25,20 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
-	// Read API key and secret from environment variables
-	apiKey := os.Getenv("ALPACA_API_KEY")
-	apiSecret := os.Getenv("ALPACA_API_SECRET")
-
-	// TEST STREAM
-	// Alpaca WebSocket URL for the stream
-	socketURL := url.URL{
-		Scheme: "wss",
-		Host:   "stream.data.alpaca.markets",
-		Path:   "/v2/test",
+	// Continuously produce messages with stock prices to Kafka topic
+	symbols := [...]string{"FAKEPACA"} // change this to * for all symbols
+	for _, symbol := range symbols {
+		subscribeToStream(producer, symbol)
 	}
+}
 
-	// Connect to the WebSocket
-	log.Printf("Connecting to %s", socketURL.String())
-	conn, _, err := websocket.DefaultDialer.Dial(socketURL.String(), nil)
-	if err != nil {
-		log.Fatalf("Error connecting to WebSocket: %v", err)
-	}
-	defer conn.Close()
+func subscribeToStream(producer sarama.SyncProducer, symbol string) {
+	conn := connectToWebsocket()
 
-	// Authenticate with the WebSocket
-	authMessage := map[string]string{
-		"action": "auth",
-		"key":    apiKey,
-		"secret": apiSecret,
-	}
-	if err := conn.WriteJSON(authMessage); err != nil {
-		log.Fatalf("Authentication error: %v", err)
-	}
-
-	// Listen for authentication success
-	_, message, err := conn.ReadMessage()
-	if err != nil {
-		log.Fatalf("Error reading message: %v", err)
-	}
-	log.Printf("Received: %s", message)
-
-	// TEST STREAM SYMBOL
 	// Subscribe to stream
 	subscribeMessage := map[string]interface{}{
 		"action": "subscribe",
-		"bars":   []string{"FAKEPACA"}, // change this to * for all symbols
+		"bars":   []string{symbol},
 	}
 	if err := conn.WriteJSON(subscribeMessage); err != nil {
 		log.Fatalf("Subscription error: %v", err)
@@ -106,4 +78,44 @@ func main() {
 			}
 		}
 	}
+}
+
+func connectToWebsocket() *websocket.Conn {
+	// Read API key and secret from environment variables
+	apiKey := os.Getenv("ALPACA_API_KEY")
+	apiSecret := os.Getenv("ALPACA_API_SECRET")
+
+	// Alpaca WebSocket URL for the stream
+	socketURL := url.URL{
+		Scheme: "wss",
+		Host:   "stream.data.alpaca.markets",
+		Path:   "/v2/test",
+	}
+
+	// Connect to the WebSocket
+	log.Printf("Connecting to %s", socketURL.String())
+	conn, _, err := websocket.DefaultDialer.Dial(socketURL.String(), nil)
+	if err != nil {
+		log.Fatalf("Error connecting to WebSocket: %v", err)
+	}
+	defer conn.Close()
+
+	// Authenticate with the WebSocket
+	authMessage := map[string]string{
+		"action": "auth",
+		"key":    apiKey,
+		"secret": apiSecret,
+	}
+	if err := conn.WriteJSON(authMessage); err != nil {
+		log.Fatalf("Authentication error: %v", err)
+	}
+
+	// Listen for authentication success
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Fatalf("Error reading message: %v", err)
+	}
+	log.Printf("Received: %s", message)
+
+	return conn
 }
