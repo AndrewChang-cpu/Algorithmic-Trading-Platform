@@ -194,28 +194,36 @@ class TestStrategy(bt.Strategy):
 ###############################################################################
 
 def runstrategy():
-    args = parse_args()
+    # Configuration values
+    kafka_topic = 'stock_data'
+    kafka_group = 'backtrader-group'
+    kafka_server = 'localhost:9092'
+    smaperiod = 5
+    stake = 10
+    initial_cash = 100000.0
+    commission = 0
+    plot_results = True
 
     # Create a cerebro instance
     cerebro = bt.Cerebro()
 
     # Add the custom Kafka data feed (or any other feed)
-    print('Consumer Group:', args.kafka_group)
+    print('Consumer Group:', kafka_group)
     kafka_feed = KafkaDataFeed(
-        topic=args.kafka_topic,
-        consumer_group=args.kafka_group,
-        kafka_servers=args.kafka_server
+        topic=kafka_topic,
+        consumer_group=kafka_group,
+        kafka_servers=kafka_server
     )
     cerebro.adddata(kafka_feed)
 
     # Add the strategy
-    cerebro.addstrategy(TestStrategy, stake=args.stake)
+    cerebro.addstrategy(TestStrategy, stake=stake)
 
     # Set initial cash (for paper trading)
-    cerebro.broker.setcash(100000.0)  # Set your initial paper trading capital
+    cerebro.broker.setcash(initial_cash)
 
     # Set commission (optional)
-    cerebro.broker.setcommission(commission=0)  # Set a custom commission rate if needed
+    cerebro.broker.setcommission(commission)  # Set a custom commission rate if needed
 
     # Run the strategy
     cerebro.run()
@@ -224,44 +232,8 @@ def runstrategy():
     print(f'Final Portfolio Value: {cerebro.broker.getvalue()}')
 
     # Optionally plot the results
-    if args.plot:
+    if plot_results:
         cerebro.plot()
-
-###############################################################################
-# Argument Parsing Function
-###############################################################################
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        description='Backtrader Pure Paper Trading Simulation'
-    )
-
-    parser.add_argument('--kafka_topic', default='stock_data',
-                        required=False, action='store',
-                        help='Kafka topic to consume stock data from')
-
-    parser.add_argument('--kafka_group', default='backtrader-group',
-                        required=False, action='store',
-                        help='Kafka consumer group id')
-
-    parser.add_argument('--kafka_server', default='localhost:9092',
-                        required=False, action='store',
-                        help='Kafka bootstrap servers')
-
-    parser.add_argument('--smaperiod', default=5, type=int,
-                        required=False, action='store',
-                        help='Period to apply to the Simple Moving Average')
-
-    parser.add_argument('--stake', default=10, type=int,
-                        required=False, action='store',
-                        help='Stake to use in buy/sell operations')
-
-    parser.add_argument('--plot',
-                        required=False, action='store_true',
-                        help='Plot the results after the run')
-
-    return parser.parse_args()
 
 ###############################################################################
 # Main Execution
