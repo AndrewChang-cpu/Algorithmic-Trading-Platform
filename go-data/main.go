@@ -35,6 +35,7 @@ func main() {
 
 func subscribeToStream(producer sarama.SyncProducer, symbol string) {
 	conn := connectToWebsocket()
+	defer conn.Close()
 
 	// Subscribe to stream
 	subscribeMessage := map[string]interface{}{
@@ -99,7 +100,6 @@ func connectToWebsocket() *websocket.Conn {
 	if err != nil {
 		log.Fatalf("Error connecting to WebSocket: %v", err)
 	}
-	defer conn.Close()
 
 	// Authenticate with the WebSocket
 	authMessage := map[string]string{
