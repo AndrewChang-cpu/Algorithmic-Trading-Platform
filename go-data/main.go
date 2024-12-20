@@ -28,8 +28,9 @@ func main() {
 	// Continuously produce messages with stock prices to Kafka topic
 	symbols := [...]string{"FAKEPACA"} // change this to * for all symbols
 	for _, symbol := range symbols {
-		subscribeToStream(producer, symbol)
+		go subscribeToStream(producer, symbol)
 	}
+	select {} // block forever
 }
 
 func subscribeToStream(producer sarama.SyncProducer, symbol string) {
