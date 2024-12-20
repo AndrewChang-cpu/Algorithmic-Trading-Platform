@@ -1,10 +1,14 @@
 # Algorithmic-Trading-Platform
 ## Basic Workflow
-- Start Kafka broker
-- Run strategy ```python .\strategy.py --kafka_topic stock_data --kafka_group backtrader-group2 --kafka_server localhost:9092 --plot```
+- Start Kafka broker using Docker Compose: ```docker-compose -f local-kafka-docker-compose.yml up```
+- Run Redis (eventually replace with Kafka): ```docker run -d -p 6379:6379 redis```
+- Run Celery worker: ```celery -A celery_worker worker --loglevel=info```
+
+- Run strategy ```python .\strategy.py --kafka_topic stock_data --kafka_group backtrader-group2 --kafka_server localhost:9092 --plot``` (outdated)
 
 ## Useful Commands
 #### Test consumer:
+docker exec -it 33e050408928 /bin/sh   
 kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic stock_data --from-beginning
 
 #### Delete topic:
