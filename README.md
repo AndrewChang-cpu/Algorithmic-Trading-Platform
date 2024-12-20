@@ -8,7 +8,7 @@
 
 ## Useful Commands
 #### Test consumer:
-docker exec -it 33e050408928 /bin/sh   
+docker exec -it [CONTAINER ID] /bin/sh   
 kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic stock_data --from-beginning
 
 #### Delete topic:
