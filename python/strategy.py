@@ -192,17 +192,7 @@ class TestStrategy(bt.Strategy):
 # Run Strategy Function
 ###############################################################################
 
-def runstrategy():
-    # Configuration values
-    kafka_topic = 'stock_data'
-    kafka_group = 'backtrader-group'
-    kafka_server = 'localhost:9092'
-    smaperiod = 5
-    stake = 10
-    initial_cash = 100000.0
-    commission = 0
-    plot_results = True
-
+def run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results=True):
     # Create a cerebro instance
     cerebro = bt.Cerebro()
 
@@ -239,4 +229,11 @@ def runstrategy():
 ###############################################################################
 
 if __name__ == '__main__':
-    runstrategy()
+    kafka_topic = 'stock_data'
+    kafka_group = 'backtrader-group'
+    kafka_server = 'localhost:9092'
+    stake = 10
+    initial_cash = 100000.0
+    commission = 0
+    plot_results = True
+    run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results)
