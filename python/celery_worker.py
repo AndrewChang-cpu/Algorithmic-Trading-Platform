@@ -4,7 +4,8 @@ from strategy import TestStrategy
 import sys
 
 ######################
-# This seems to be necessary to run Celery. Remove if not needed.
+# This seems to be necessary to run Celery because backtrader.utils.flushfile isn't correct
+# Remove if needed
 class FlushFile:
     def __init__(self, f):
         self.f = f

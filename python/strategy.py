@@ -6,13 +6,13 @@ from __future__ import (absolute_import, division, print_function,
 import argparse
 from datetime import datetime
 
-# Import Backtrader and necessary utilities
-import backtrader as bt
-from backtrader.utils import flushfile  # win32 quick stdout flushing
-
 # Import Confluent Kafka for Kafka consumer
 from confluent_kafka import Producer, Consumer, KafkaError, TopicPartition
 import json
+
+# Import Backtrader and necessary utilities
+import backtrader as bt
+
 
 ###############################################################################
 # Custom Kafka Data Feed Class
@@ -23,7 +23,7 @@ class KafkaDataFeed(bt.feeds.DataBase):
 
     params = (
         ('topic', 'stock_data'),
-        ('consumer_group', 'backtrader-group'),
+        ('consumer_group', 'backtrader-group'), # TODO: Randomly create consumer group name
         ('kafka_servers', 'localhost:9092'),
         ('timeout', 1.0),  # Timeout for polling Kafka
         ('stocks', ['FAKEPACA']),  # List of stock symbols in the portfolio
@@ -57,10 +57,9 @@ class KafkaDataFeed(bt.feeds.DataBase):
     def assign_partitions_based_on_stocks(self):
         """ Manually assign partitions based on the stocks in the portfolio """
         partitions = []
-        for stock in self.p.stocks:
+        for partition, stock in enumerate(self.p.stocks):
             # Calculate the partition based on the stock symbol
             print('Assigning partition based on stock:', stock)
-            partition = 0  # CHANGE THIS LATER
             partitions.append(TopicPartition(self.p.topic, partition))
 
         # Assign the partitions to the consumer
