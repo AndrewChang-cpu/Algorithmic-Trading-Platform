@@ -9,8 +9,19 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+type TaskParams struct {
+	KafkaTopic  string  `json:"kafka_topic"`
+	KafkaGroup  string  `json:"kafka_group"`
+	KafkaServer string  `json:"kafka_server"`
+	Stake       int     `json:"stake"`
+	InitialCash float64 `json:"initial_cash"`
+	Commission  float64 `json:"commission"`
+	PlotResults bool    `json:"plot_results"`
+}
 
 var ctx = context.Background()
 
@@ -33,6 +44,7 @@ func initRedisClient() *redis.Client {
 	}
 	return client
 }
+
 func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redis.Client) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -40,16 +52,26 @@ func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redi
 	}
 
 	// Parse the JSON request body
-	var task TaskData
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+	var params TaskParams
+	err := json.NewDecoder(r.Body).Decode(&params)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// Convert task data to JSON to publish to Redis
-	taskData, err := json.Marshal(task)
+	// Create the task message
+	taskMessage := map[string]interface{}{
+		"id":      uuid.NewString(),
+		"task":    "celery_worker.run_test_strategy",
+		"args":    []interface{}{"test"},
+		"kwargs":  map[string]interface{}{},
+		"retries": 0,
+		"eta":     nil,
+	}
+
+	taskData, err := json.Marshal(taskMessage)
 	if err != nil {
-		http.Error(w, "Could not encode task data", http.StatusInternalServerError)
+		http.Error(w, "Failed to marshal task data", http.StatusInternalServerError)
 		return
 	}
 
@@ -60,6 +82,7 @@ func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redi
 		return
 	}
 
+	w.WriteHeader(http.StatusAccepted)
 	fmt.Fprintf(w, "Task published successfully")
 }
 
