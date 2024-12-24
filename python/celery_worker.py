@@ -2,6 +2,7 @@ from celery import Celery
 import backtrader as bt
 from strategy import run_strategy
 import sys
+import json
 
 ######################
 # This seems to be necessary to run Celery because backtrader.utils.flushfile isn't correct
@@ -27,22 +28,12 @@ sys.stderr = FlushFile(sys.stderr)
 app = Celery('tasks', broker='redis://localhost:6379/0')
 
 @app.task
-def run_test_strategy():
-    kafka_topic = 'stock_data'
-    kafka_group = 'backtrader-group'
-    kafka_server = 'localhost:9092'
-    stake = 10
-    initial_cash = 100000.0
-    commission = 0
-    plot_results = True
+def run_test_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results):
     run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results)
-    
     return "Strategy executed"
 
 
 # # Basic Version
-# app = Celery('tasks', broker='redis://localhost:6379/0')
-
 # @app.task
 # def run_test_strategy(stake):
 #     return "Strategy executed with stake: {}".format(stake)

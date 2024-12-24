@@ -9,7 +9,6 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -60,20 +59,7 @@ func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redi
 	}
 
 	// Create the task message
-	taskMessage := map[string]interface{}{
-		"id":      uuid.NewString(),
-		"task":    "celery_worker.run_test_strategy",
-		"args":    []interface{}{"test"},
-		"kwargs":  map[string]interface{}{},
-		"retries": 0,
-		"eta":     nil,
-	}
-
-	taskData, err := json.Marshal(taskMessage)
-	if err != nil {
-		http.Error(w, "Failed to marshal task data", http.StatusInternalServerError)
-		return
-	}
+	taskData := ConstructMessage(params)
 
 	// Publish to the Redis queue
 	err = redisClient.RPush(ctx, "celery", taskData).Err()
@@ -82,8 +68,8 @@ func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redi
 		return
 	}
 
+	fmt.Println("Task successfully published")
 	w.WriteHeader(http.StatusAccepted)
-	fmt.Fprintf(w, "Task published successfully")
 }
 
 var upgrader = websocket.Upgrader{

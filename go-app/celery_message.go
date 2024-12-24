@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/google/uuid"
@@ -54,11 +55,20 @@ type CeleryProperties struct {
 	DeliveryTag   string                 `json:"delivery_tag"`
 }
 
-func ConstructMessage() []byte { // TaskParams params
+func ConstructMessage(params TaskParams) []byte { // TaskParams params
 	// Define task arguments
-	args := []interface{}{"foo"}       // Positional arguments
-	kwargs := map[string]interface{}{} // Keyword arguments
-	embed := map[string]interface{}{}  // Embedded data (usually empty)
+	args := []interface{}{} // Positional arguments
+	kwargs := map[string]interface{}{
+		"kafka_topic":  params.KafkaTopic,
+		"kafka_group":  params.KafkaGroup,
+		"kafka_server": params.KafkaServer,
+		"stake":        params.Stake,
+		"initial_cash": params.InitialCash,
+		"commission":   params.Commission,
+		"plot_results": params.PlotResults,
+	}
+	fmt.Println("kwargs:", kwargs)
+	embed := map[string]interface{}{} // Embedded data (usually empty)
 
 	// Serialize the body as JSON and Base64 encode it
 	bodyData, err := json.Marshal([]interface{}{args, kwargs, embed})
@@ -89,8 +99,8 @@ func ConstructMessage() []byte { // TaskParams params
 			TimeLimit:           [2]*string{nil, nil},
 			RootID:              taskID,
 			ParentID:            nil,
-			ArgsRepr:            "['foo']",
-			KwargsRepr:          "{}",
+			ArgsRepr:            fmt.Sprintf("%v", args),
+			KwargsRepr:          fmt.Sprintf("%v", kwargs),
 			Origin:              "gen29460@ImStupid",
 			IgnoreResult:        false,
 			ReplacedTaskNesting: 0,
