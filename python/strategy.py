@@ -5,6 +5,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import argparse
 from datetime import datetime
+import uuid
 
 # Import Confluent Kafka for Kafka consumer
 from confluent_kafka import Producer, Consumer, KafkaError, TopicPartition
@@ -23,7 +24,7 @@ class KafkaDataFeed(bt.feeds.DataBase):
 
     params = (
         ('topic', 'stock_data'),
-        ('consumer_group', 'backtrader-group'), # TODO: Randomly create consumer group name
+        ('consumer_group', 'backtrader-group'),
         ('kafka_servers', 'localhost:9092'),
         ('timeout', 1.0),  # Timeout for polling Kafka
         ('stocks', ['FAKEPACA']),  # List of stock symbols in the portfolio
@@ -192,7 +193,11 @@ class TestStrategy(bt.Strategy):
 # Run Strategy Function
 ###############################################################################
 
-def run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results=True):
+def run_strategy(stake, initial_cash, commission, plot_results=True):
+    kafka_topic = 'stock_data'
+    kafka_group = f'backtrader-group-{uuid.uuid4()}'
+    kafka_server = 'localhost:9092'
+    
     # Create a cerebro instance
     cerebro = bt.Cerebro()
 
@@ -229,11 +234,12 @@ def run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, co
 ###############################################################################
 
 if __name__ == '__main__':
-    kafka_topic = 'stock_data'
-    kafka_group = 'backtrader-group'
-    kafka_server = 'localhost:9092'
+    # kafka_topic = 'stock_data'
+    # kafka_group = 'backtrader-group'
+    # kafka_server = 'localhost:9092'
     stake = 10
     initial_cash = 100000.0
     commission = 0
     plot_results = True
-    run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results)
+    # run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results)
+    run_strategy(stake, initial_cash, commission, plot_results)

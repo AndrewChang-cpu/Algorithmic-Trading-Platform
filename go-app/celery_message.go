@@ -59,9 +59,9 @@ func ConstructMessage(params TaskParams) []byte { // TaskParams params
 	// Define task arguments
 	args := []interface{}{} // Positional arguments
 	kwargs := map[string]interface{}{
-		"kafka_topic":  params.KafkaTopic,
-		"kafka_group":  params.KafkaGroup,
-		"kafka_server": params.KafkaServer,
+		// "kafka_topic":  params.KafkaTopic,
+		// "kafka_group":  params.KafkaGroup,
+		// "kafka_server": params.KafkaServer,
 		"stake":        params.Stake,
 		"initial_cash": params.InitialCash,
 		"commission":   params.Commission,

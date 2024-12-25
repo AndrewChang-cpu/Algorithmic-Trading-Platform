@@ -28,8 +28,8 @@ sys.stderr = FlushFile(sys.stderr)
 app = Celery('tasks', broker='redis://localhost:6379/0')
 
 @app.task
-def run_test_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results):
-    run_strategy(kafka_topic, kafka_group, kafka_server, stake, initial_cash, commission, plot_results)
+def run_test_strategy(stake, initial_cash, commission, plot_results):
+    run_strategy(stake, initial_cash, commission, plot_results)
     return "Strategy executed"
 
 
