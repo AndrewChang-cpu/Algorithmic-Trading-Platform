@@ -9,6 +9,7 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -92,8 +93,8 @@ func handlePortfolioWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Create Kafka consumer
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": "localhost:9092",
-		"group.id":          "portfolio-websocket-group",
-		"auto.offset.reset": "latest",
+		"group.id":          "portfolio-websocket-consumer" + uuid.NewString(),
+		"auto.offset.reset": "earliest",
 	})
 	if err != nil {
 		log.Printf("Failed to create consumer: %v", err)
