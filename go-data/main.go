@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/url"
@@ -9,21 +10,25 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 func main() {
 	// Kafka producer configuration
-	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
+	producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
 	if err != nil {
 		log.Fatalf("Error creating Kafka producer: %v", err)
 	}
 	defer producer.Close()
 
-	// Load environment variables from .env file
-	err = godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
+	// LOCAL DEV: Load environment variables from .env file
+	// err = godotenv.Load()
+	// if err != nil {
+	// 	log.Fatalf("Error loading .env file")
+	// }
 
 	// Continuously produce messages with stock prices to Kafka topic
 	symbols := [...]string{"FAKEPACA"} // change this to * for all symbols
@@ -83,9 +88,8 @@ func subscribeToStream(producer sarama.SyncProducer, symbol string) {
 }
 
 func connectToWebsocket() *websocket.Conn {
-	// Read API key and secret from environment variables
-	apiKey := os.Getenv("ALPACA_API_KEY")
-	apiSecret := os.Getenv("ALPACA_API_SECRET")
+	// Read API key and secret from Kubernetes secrets
+	apiKey, apiSecret := getKubernetesSecrets()
 
 	// Alpaca WebSocket URL for the stream
 	socketURL := url.URL{
@@ -119,4 +123,26 @@ func connectToWebsocket() *websocket.Conn {
 	log.Printf("Received: %s", message)
 
 	return conn
+}
+
+func getKubernetesSecrets() (string, string) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		log.Fatalf("Error creating in-cluster config: %v", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("Error creating Kubernetes client: %v", err)
+	}
+
+	secret, err := clientset.CoreV1().Secrets("default").Get(context.TODO(), "alpaca-credentials", metav1.GetOptions{})
+	if err != nil {
+		log.Fatalf("Error getting Kubernetes secret: %v", err)
+	}
+
+	apiKey := string(secret.Data["api-key"])
+	apiSecret := string(secret.Data["api-secret"])
+
+	return apiKey, apiSecret
 }
