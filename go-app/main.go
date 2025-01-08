@@ -134,6 +134,12 @@ func main() {
 	})
 	http.HandleFunc("/portfolio_stream", handlePortfolioWebSocket)
 
+	// REMOVE IN PROD
+	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Connection successful"))
+	})
+
 	fmt.Println("Go server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
