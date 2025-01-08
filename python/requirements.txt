@@ -1,0 +1,5 @@
+# TODO: Add specific version numbers later
+confluent_kafka
+backtrader
+celery
+redis
