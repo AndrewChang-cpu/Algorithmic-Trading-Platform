@@ -72,6 +72,8 @@ spec:
   maxSize: 1
   zones:
   - us-east-1a
+  subnets:
+  - us-east-1a
 ---
 apiVersion: kops.k8s.io/v1alpha2
 kind: InstanceGroup
@@ -86,6 +88,8 @@ spec:
   maxSize: 3
   zones:
   - us-east-1a
+  subnets:
+  - us-east-1a
 ---
 apiVersion: kops.k8s.io/v1alpha2
 kind: InstanceGroup
@@ -95,10 +99,12 @@ metadata:
     kops.k8s.io/cluster: k8s.andrw.tech
 spec:
   role: Node
-  machineType: t3.small
+  machineType: t2.medium
   minSize: 1
   maxSize: 1
   zones:
+  - us-east-1a
+  subnets:
   - us-east-1a
   nodeLabels:
     dedicated: kafka
