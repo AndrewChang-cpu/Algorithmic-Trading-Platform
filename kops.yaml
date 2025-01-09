@@ -63,6 +63,8 @@ apiVersion: kops.k8s.io/v1alpha2
 kind: InstanceGroup
 metadata:
   name: control-plane-us-east-1a
+  labels:
+    kops.k8s.io/cluster: k8s.andrw.tech
 spec:
   role: Master
   machineType: t3.small
@@ -75,6 +77,8 @@ apiVersion: kops.k8s.io/v1alpha2
 kind: InstanceGroup
 metadata:
   name: nodes
+  labels:
+    kops.k8s.io/cluster: k8s.andrw.tech
 spec:
   role: Node
   machineType: t2.micro
@@ -87,6 +91,8 @@ apiVersion: kops.k8s.io/v1alpha2
 kind: InstanceGroup
 metadata:
   name: kafka-nodes
+  labels:
+    kops.k8s.io/cluster: k8s.andrw.tech
 spec:
   role: Node
   machineType: t3.small
