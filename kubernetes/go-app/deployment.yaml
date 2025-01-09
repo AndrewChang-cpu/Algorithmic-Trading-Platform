@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: go-app
-        image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp:go-app # TODO: Create separate repos
+        image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/go-app:latest
         env:
         - name: ALPACA_API_KEY
           valueFrom:
