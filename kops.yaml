@@ -100,8 +100,8 @@ metadata:
 spec:
   role: Node
   machineType: t3.small
-  minSize: 1
-  maxSize: 1
+  minSize: 3 # 1 isn't enough. 2 may suffice?
+  maxSize: 3
   zones:
   - us-east-1a
   subnets:
