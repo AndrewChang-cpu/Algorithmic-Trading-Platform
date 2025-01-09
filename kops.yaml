@@ -1,0 +1,102 @@
+apiVersion: kops.k8s.io/v1alpha2
+kind: Cluster
+metadata:
+  name: k8s.andrw.tech
+spec:
+  api:
+    dns: {}
+  authorization:
+    rbac: {}
+  channel: stable
+  cloudProvider: aws
+  configBase: s3://kops-config-atp/k8s.andrw.tech
+  dnsZone: k8s.andrw.tech
+  etcdClusters:
+  - cpuRequest: 200m
+    etcdMembers:
+    - encryptedVolume: true
+      instanceGroup: control-plane-us-east-1a
+      name: a
+    manager:
+      backupRetentionDays: 90
+    memoryRequest: 100Mi
+    name: main
+  - cpuRequest: 100m
+    etcdMembers:
+    - encryptedVolume: true
+      instanceGroup: control-plane-us-east-1a
+      name: a
+    manager:
+      backupRetentionDays: 90
+    memoryRequest: 100Mi
+    name: events
+  iam:
+    allowContainerRegistry: true
+    legacy: false
+  kubeProxy:
+    enabled: false
+  kubelet:
+    anonymousAuth: false
+  kubernetesApiAccess:
+  - 0.0.0.0/0
+  - ::/0
+  kubernetesVersion: 1.30.8
+  masterPublicName: api.k8s.andrw.tech
+  networkCIDR: 172.20.0.0/16
+  networking:
+    cilium:
+      enableNodePort: true
+  nonMasqueradeCIDR: 100.64.0.0/10
+  sshAccess:
+  - 0.0.0.0/0
+  - ::/0
+  subnets:
+  - cidr: 172.20.0.0/16
+    name: us-east-1a
+    type: Public
+    zone: us-east-1a
+  topology:
+    dns:
+      type: Public
+---
+apiVersion: kops.k8s.io/v1alpha2
+kind: InstanceGroup
+metadata:
+  name: control-plane-us-east-1a
+spec:
+  role: Master
+  machineType: t3.small
+  minSize: 1
+  maxSize: 1
+  zones:
+  - us-east-1a
+---
+apiVersion: kops.k8s.io/v1alpha2
+kind: InstanceGroup
+metadata:
+  name: nodes
+spec:
+  role: Node
+  machineType: t2.micro
+  minSize: 3
+  maxSize: 3
+  zones:
+  - us-east-1a
+---
+apiVersion: kops.k8s.io/v1alpha2
+kind: InstanceGroup
+metadata:
+  name: kafka-nodes
+spec:
+  role: Node
+  machineType: t3.small
+  minSize: 1
+  maxSize: 1
+  zones:
+  - us-east-1a
+  nodeLabels:
+    dedicated: kafka
+  taints:
+  - key: dedicated
+    value: kafka
+    effect: NoSchedule

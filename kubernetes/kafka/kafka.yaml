@@ -12,6 +12,8 @@ spec:
       labels:
         app: kafka
     spec:
+      nodeSelector:
+        dedicated: kafka
       containers:
       - name: kafka
         image: bitnami/kafka:latest
