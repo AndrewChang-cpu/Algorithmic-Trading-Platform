@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/url"
-	"os"
+
+	// "os"
+	// "github.com/joho/godotenv"
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
-	v1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
