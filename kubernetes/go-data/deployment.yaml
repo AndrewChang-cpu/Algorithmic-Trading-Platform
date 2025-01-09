@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: go-app
+  name: go-data
   labels:
-    app: go-app
+    app: go-data
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: go-app
+      app: go-data
   template:
     metadata:
       labels:
-        app: go-app
+        app: go-data
     spec:
       containers:
-      - name: go-app
+      - name: go-data
         image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/go-data:latest
         ports:
         - containerPort: 8080
