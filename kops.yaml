@@ -99,7 +99,7 @@ metadata:
     kops.k8s.io/cluster: k8s.andrw.tech
 spec:
   role: Node
-  machineType: t2.medium
+  machineType: t3.small
   minSize: 1
   maxSize: 1
   zones:
@@ -109,6 +109,4 @@ spec:
   nodeLabels:
     dedicated: kafka
   taints:
-  - key: dedicated
-    value: kafka
-    effect: NoSchedule
+  - dedicated=kafka:NoSchedule
