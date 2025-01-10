@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/url"
-
-	// "os"
-	// "github.com/joho/godotenv"
+	"os"
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
@@ -20,7 +18,7 @@ import (
 func main() {
 	// Kafka producer configuration
 	producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
-	if err != nil {
+	if (err != nil) {
 		log.Fatalf("Error creating Kafka producer: %v", err)
 	}
 	defer producer.Close()
@@ -40,6 +38,7 @@ func main() {
 }
 
 func subscribeToStream(producer sarama.SyncProducer, symbol string) {
+	return
 	conn := connectToWebsocket()
 	defer conn.Close()
 
@@ -89,8 +88,9 @@ func subscribeToStream(producer sarama.SyncProducer, symbol string) {
 }
 
 func connectToWebsocket() *websocket.Conn {
-	// Read API key and secret from Kubernetes secrets
-	apiKey, apiSecret := getKubernetesSecrets()
+	// Read API key and secret from environment variables
+	apiKey := os.Getenv("ALPACA_API_KEY")
+	apiSecret := os.Getenv("ALPACA_API_SECRET")
 
 	// Alpaca WebSocket URL for the stream
 	socketURL := url.URL{
@@ -124,26 +124,4 @@ func connectToWebsocket() *websocket.Conn {
 	log.Printf("Received: %s", message)
 
 	return conn
-}
-
-func getKubernetesSecrets() (string, string) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatalf("Error creating in-cluster config: %v", err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("Error creating Kubernetes client: %v", err)
-	}
-
-	secret, err := clientset.CoreV1().Secrets("default").Get(context.TODO(), "alpaca-credentials", metav1.GetOptions{})
-	if err != nil {
-		log.Fatalf("Error getting Kubernetes secret: %v", err)
-	}
-
-	apiKey := string(secret.Data["api-key"])
-	apiSecret := string(secret.Data["api-secret"])
-
-	return apiKey, apiSecret
 }
