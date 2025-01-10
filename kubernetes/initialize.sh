@@ -9,6 +9,8 @@ kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/downloa
 SSM_PARAMETER_NAME="/atp/alpaca-credentials" # Name of the Parameter Store entry
 NAMESPACE="default"                          # Kubernetes namespace
 SEALED_SECRET_NAME="alpaca-credentials"      # Name of the SealedSecret
+PUBLIC_CERT_FILE="temp.pem"                # Temporary file to store the public certificate
+SEALED_SECRET_FILE="${SEALED_SECRET_NAME}-sealed.yaml" # SealedSecret output file
 
 # Step 1: Fetch parameter from AWS SSM Parameter Store
 echo "Fetching parameter from AWS Parameter Store..."
@@ -47,29 +49,35 @@ EOF
 TEMP_SECRET_FILE=$(mktemp)
 echo "$SECRET_MANIFEST" > "$TEMP_SECRET_FILE"
 
-# Step 3: Seal the secret using --fetch-cert
-echo "Sealing the secret..."
-SEALED_SECRET_MANIFEST=$(kubeseal --fetch-cert --namespace "$NAMESPACE" -o yaml < "$TEMP_SECRET_FILE")
+# Step 3: Fetch the public certificate
+echo "Fetching Sealed Secrets public certificate..."
+kubeseal --fetch-cert > "$PUBLIC_CERT_FILE"
 if [ $? -ne 0 ]; then
-  echo "Error: Failed to seal the secret."
+  echo "Error: Failed to fetch the public certificate."
   rm "$TEMP_SECRET_FILE"
   exit 1
 fi
 
-# Step 4: Apply the sealed secret to the cluster
-SEALED_SECRET_FILE="${SEALED_SECRET_NAME}-sealed.yaml"
-echo "$SEALED_SECRET_MANIFEST" > "$SEALED_SECRET_FILE"
+# Step 4: Seal the secret using the fetched certificate
+echo "Sealing the secret..."
+kubeseal --cert "$PUBLIC_CERT_FILE" --namespace "$NAMESPACE" -o yaml < "$TEMP_SECRET_FILE" > "$SEALED_SECRET_FILE"
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to seal the secret."
+  rm "$TEMP_SECRET_FILE" "$PUBLIC_CERT_FILE"
+  exit 1
+fi
+
+# Step 5: Apply the sealed secret to the cluster
 echo "Applying sealed secret to the cluster..."
 kubectl apply -f "$SEALED_SECRET_FILE"
 if [ $? -ne 0 ]; then
   echo "Error: Failed to apply the sealed secret."
-  rm "$TEMP_SECRET_FILE"
-  rm "$SEALED_SECRET_FILE"
+  rm "$TEMP_SECRET_FILE" "$PUBLIC_CERT_FILE" "$SEALED_SECRET_FILE"
   exit 1
 fi
 
 # Clean up temporary files
-rm "$TEMP_SECRET_FILE"
+rm "$TEMP_SECRET_FILE" "$PUBLIC_CERT_FILE"
 
 echo "Sealed secret $SEALED_SECRET_NAME successfully created and applied in namespace $NAMESPACE."
 
