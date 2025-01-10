@@ -31,3 +31,14 @@ spec:
             port: 8080
           initialDelaySeconds: 3
           periodSeconds: 5
+        env:
+        - name: ALPACA_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: alpaca-credentials
+              key: ALPACA_API_KEY
+        - name: ALPACA_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: alpaca-credentials
+              key: ALPACA_API_SECRET
