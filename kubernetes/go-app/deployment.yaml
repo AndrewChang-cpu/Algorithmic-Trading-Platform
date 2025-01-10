@@ -17,16 +17,18 @@ spec:
       containers:
       - name: go-app
         image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/go-app:latest
-        env:
-        - name: ALPACA_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: alpaca-credentials
-              key: api-key
-        - name: ALPACA_API_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: alpaca-credentials
-              key: api-secret
-        - name: KAFKA_BROKER
-          value: "kafka-service:9092" # Update with your Kafka service DNS
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /test
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /test
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      restartPolicy: Always
