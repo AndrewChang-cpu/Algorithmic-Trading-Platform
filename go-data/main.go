@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/url"
@@ -9,16 +8,12 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 func main() {
 	// Kafka producer configuration
 	producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
-	if (err != nil) {
+	if err != nil {
 		log.Fatalf("Error creating Kafka producer: %v", err)
 	}
 	defer producer.Close()
@@ -38,7 +33,6 @@ func main() {
 }
 
 func subscribeToStream(producer sarama.SyncProducer, symbol string) {
-	return
 	conn := connectToWebsocket()
 	defer conn.Close()
 
