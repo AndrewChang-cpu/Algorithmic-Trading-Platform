@@ -17,20 +17,6 @@ spec:
       containers:
       - name: go-data
         image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/go-data:latest
-        ports:
-        - containerPort: 8080
-        livenessProbe: # Restart container if it becomes unhealthy
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 5
-        readinessProbe: # Add pod to the service only after it's ready
-          httpGet:
-            path: /
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 5
         env:
         - name: ALPACA_API_KEY
           valueFrom:
