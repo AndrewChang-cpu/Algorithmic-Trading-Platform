@@ -1,0 +1,12 @@
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, auto);
+    gap: 8px;
+  }
+  
+  .chart-container {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 16px;
+  }
