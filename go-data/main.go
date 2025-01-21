@@ -25,7 +25,7 @@ func main() {
 	// }
 
 	// Continuously produce messages with stock prices to Kafka topic
-	symbols := [...]string{"FAKEPACA"} // change this to * for all symbols
+	symbols := [...]string{"FAKEPACA", "GOOG", "AAPL"} // change this to * for all symbols
 	for _, symbol := range symbols {
 		go subscribeToStream(producer, symbol)
 	}
@@ -66,7 +66,7 @@ func subscribeToStream(producer sarama.SyncProducer, symbol string) {
 				// Produce the WebSocket message to Kafka
 				kafkaMessage := &sarama.ProducerMessage{
 					Topic: "stock_data",
-					Key:   sarama.StringEncoder("S"),
+					Key:   sarama.StringEncoder(symbol),
 					Value: sarama.StringEncoder(string(message)),
 				}
 

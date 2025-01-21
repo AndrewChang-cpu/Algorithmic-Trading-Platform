@@ -27,7 +27,7 @@ class KafkaDataFeed(bt.feeds.DataBase):
         ('consumer_group', 'backtrader-group'),
         ('kafka_servers', 'localhost:9092'),
         ('timeout', 1.0),  # Timeout for polling Kafka
-        ('stocks', ['FAKEPACA']),  # List of stock symbols in the portfolio
+        ('stocks', ['FAKEPACA', "GOOG", "AAPL"]),  # List of stock symbols in the portfolio
         ('total_partitions', 1)  # Number of partitions for the topic
     )
     
