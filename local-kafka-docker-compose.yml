@@ -21,3 +21,8 @@ services:
       KAFKA_CREATE_TOPICS: "stock_data:1:1"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
