@@ -8,38 +8,44 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
+	"github.com/joho/godotenv"
 )
 
 func main() {
 	// Kafka producer configuration
-	producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
+	// - LOCAL DEV: Load environment variables from .env file
+	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
 	if err != nil {
 		log.Fatalf("Error creating Kafka producer: %v", err)
 	}
 	defer producer.Close()
 
-	// LOCAL DEV: Load environment variables from .env file
-	// err = godotenv.Load()
+	err = godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	// - CLOUD DEV: Env variables are loaded in as secrets
+	// producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
 	// if err != nil {
-	// 	log.Fatalf("Error loading .env file")
+	// 	log.Fatalf("Error creating Kafka producer: %v", err)
 	// }
+	// defer producer.Close()
 
 	// Continuously produce messages with stock prices to Kafka topic
-	symbols := [...]string{"FAKEPACA", "GOOG", "AAPL"} // change this to * for all symbols
-	for _, symbol := range symbols {
-		go subscribeToStream(producer, symbol)
-	}
+	symbols := []string{"GOOG", "AAPL"} // change this to * for all symbols
+	subscribeToAlpacaStream(producer, symbols)
 	select {} // block forever
 }
 
-func subscribeToStream(producer sarama.SyncProducer, symbol string) {
+func subscribeToAlpacaStream(producer sarama.SyncProducer, symbols []string) {
 	conn := connectToWebsocket()
 	defer conn.Close()
 
 	// Subscribe to stream
 	subscribeMessage := map[string]interface{}{
 		"action": "subscribe",
-		"bars":   []string{symbol},
+		"bars":   symbols,
 	}
 	if err := conn.WriteJSON(subscribeMessage); err != nil {
 		log.Fatalf("Subscription error: %v", err)
@@ -66,7 +72,7 @@ func subscribeToStream(producer sarama.SyncProducer, symbol string) {
 				// Produce the WebSocket message to Kafka
 				kafkaMessage := &sarama.ProducerMessage{
 					Topic: "stock_data",
-					Key:   sarama.StringEncoder(symbol),
+					Key:   sarama.StringEncoder(msg["S"].(string)),
 					Value: sarama.StringEncoder(string(message)),
 				}
 

@@ -58,9 +58,10 @@ class KafkaDataFeed(bt.feeds.DataBase):
     def assign_partitions_based_on_stocks(self):
         """ Manually assign partitions based on the stocks in the portfolio """
         partitions = []
-        for partition, stock in enumerate(self.p.stocks):
+        for stock in self.p.stocks:
             # Calculate the partition based on the stock symbol
-            print('Assigning partition based on stock:', stock)
+            partition = hash(stock) % self.p.total_partitions
+            print(f'Assigning partition {partition} for stock: {stock}')
             partitions.append(TopicPartition(self.p.topic, partition))
 
         # Assign the partitions to the consumer
