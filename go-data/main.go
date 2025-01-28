@@ -33,7 +33,7 @@ func main() {
 	// defer producer.Close()
 
 	// Continuously produce messages with stock prices to Kafka topic
-	symbols := []string{"GOOG", "AAPL"} // change this to * for all symbols
+	symbols := []string{"FAKEPACA"} // change this to * for all symbols
 	subscribeToAlpacaStream(producer, symbols)
 	select {} // block forever
 }

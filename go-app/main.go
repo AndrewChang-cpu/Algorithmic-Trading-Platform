@@ -33,7 +33,8 @@ type TaskData struct {
 // Initialize Redis client
 func initRedisClient() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
+		// Addr:     "redis:6379",
+		Addr:     "localhost:6379",
 		Password: "",
 		DB:       0,
 	})
@@ -92,7 +93,8 @@ func handlePortfolioWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Create Kafka consumer
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers": "kafka:9092",
+		// "bootstrap.servers": "kafka:9092",
+		"bootstrap.servers": "localhost:9092",
 		"group.id":          "portfolio-websocket-consumer" + uuid.NewString(),
 		"auto.offset.reset": "earliest",
 	})
