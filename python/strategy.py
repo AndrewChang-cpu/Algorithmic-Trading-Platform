@@ -25,7 +25,7 @@ class KafkaDataFeed(bt.feeds.DataBase):
     params = (
         ('topic', 'stock_data'),
         ('consumer_group', 'backtrader-group'),
-        ('kafka_servers', 'localhost:9092'),
+        ('kafka_servers', 'kafka:9092'),
         ('timeout', 1.0),  # Timeout for polling Kafka
         ('stocks', ['FAKEPACA', "GOOG", "AAPL"]),  # List of stock symbols in the portfolio
         ('total_partitions', 1)  # Number of partitions for the topic
@@ -133,7 +133,7 @@ class TestStrategy(bt.Strategy):
 
         # Initialize Kafka producer
         self.kafka_producer = Producer({
-            'bootstrap.servers': 'localhost:9092'  # Kafka broker address
+            'bootstrap.servers': 'kafka:9092'  # Kafka broker address
         })
 
     def notify_data(self, data, status, *args, **kwargs):
@@ -197,7 +197,7 @@ class TestStrategy(bt.Strategy):
 def run_strategy(stake, initial_cash, commission, plot_results=True):
     kafka_topic = 'stock_data'
     kafka_group = f'backtrader-group-{uuid.uuid4()}'
-    kafka_server = 'localhost:9092'
+    kafka_server = 'kafka:9092'
     
     # Create a cerebro instance
     cerebro = bt.Cerebro()

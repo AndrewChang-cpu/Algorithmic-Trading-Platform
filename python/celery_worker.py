@@ -25,7 +25,7 @@ sys.stdout = FlushFile(sys.stdout)
 sys.stderr = FlushFile(sys.stderr)
 ######################
 
-app = Celery('tasks', broker='redis://localhost:6379/0')
+app = Celery('tasks', broker='redis://redis:6379/0')
 
 @app.task
 def run_test_strategy(stake, initial_cash, commission, plot_results):

@@ -8,29 +8,29 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
 )
 
 func main() {
 	// Kafka producer configuration
-	// - LOCAL DEV: Load environment variables from .env file
-	producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
-	if err != nil {
-		log.Fatalf("Error creating Kafka producer: %v", err)
-	}
-	defer producer.Close()
 
-	err = godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-
-	// - CLOUD DEV: Env variables are loaded in as secrets
-	// producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
+	// // - LOCAL DEV: Load environment variables from .env file
+	// producer, err := sarama.NewSyncProducer([]string{"localhost:9092"}, nil)
 	// if err != nil {
 	// 	log.Fatalf("Error creating Kafka producer: %v", err)
 	// }
 	// defer producer.Close()
+
+	// err = godotenv.Load()
+	// if err != nil {
+	// 	log.Fatalf("Error loading .env file")
+	// }
+
+	// - CLOUD DEV: Env variables are loaded in as secrets
+	producer, err := sarama.NewSyncProducer([]string{"kafka:9092"}, nil)
+	if err != nil {
+		log.Fatalf("Error creating Kafka producer: %v", err)
+	}
+	defer producer.Close()
 
 	// Continuously produce messages with stock prices to Kafka topic
 	symbols := []string{"GOOG", "AAPL"} // change this to * for all symbols
