@@ -3,3 +3,4 @@ confluent_kafka
 backtrader
 celery
 redis
+alpaca-py
