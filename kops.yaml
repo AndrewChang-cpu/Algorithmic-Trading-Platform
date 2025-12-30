@@ -9,7 +9,7 @@ spec:
     rbac: {}
   channel: stable
   cloudProvider: aws
-  configBase: s3://kops-config-atp/k8s.andrw.tech
+  configBase: s3://kops-config-algo-trading/k8s.andrw.tech
   dnsZone: k8s.andrw.tech
   etcdClusters:
   - cpuRequest: 200m
@@ -40,7 +40,7 @@ spec:
   kubernetesApiAccess:
   - 0.0.0.0/0
   - ::/0
-  kubernetesVersion: 1.30.8
+  kubernetesVersion: 1.31.14
   masterPublicName: api.k8s.andrw.tech
   networkCIDR: 172.20.0.0/16
   networking:

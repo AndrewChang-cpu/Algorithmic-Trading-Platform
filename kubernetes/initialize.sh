@@ -17,7 +17,7 @@ echo "Fetching parameter from AWS Parameter Store..."
 PARAMETER_VALUE=$(aws ssm get-parameter --name "$SSM_PARAMETER_NAME" --query "Parameter.Value" --output text)
 if [ $? -ne 0 ]; then
   echo "Error: Failed to fetch parameter from AWS Parameter Store."
-  exit 1
+  return 1
 fi
 
 # Parameter value is JSON-encoded
@@ -27,7 +27,7 @@ ALPACA_API_SECRET=$(echo "$PARAMETER_VALUE" | jq -r '.ALPACA_API_SECRET')
 
 if [ -z "$ALPACA_API_KEY" ] || [ -z "$ALPACA_API_SECRET" ]; then
   echo "Error: Missing ALPACA_API_KEY or ALPACA_API_SECRET in the parameter value."
-  exit 1
+  return 1
 fi
 
 # Step 2: Create Kubernetes secret manifest
@@ -55,7 +55,7 @@ kubeseal --fetch-cert > "$PUBLIC_CERT_FILE"
 if [ $? -ne 0 ]; then
   echo "Error: Failed to fetch the public certificate."
   rm "$TEMP_SECRET_FILE"
-  exit 1
+  return 1
 fi
 
 # Step 4: Seal the secret using the fetched certificate
@@ -64,7 +64,7 @@ kubeseal --cert "$PUBLIC_CERT_FILE" --namespace "$NAMESPACE" -o yaml < "$TEMP_SE
 if [ $? -ne 0 ]; then
   echo "Error: Failed to seal the secret."
   rm "$TEMP_SECRET_FILE" "$PUBLIC_CERT_FILE"
-  exit 1
+  return 1
 fi
 
 # Step 5: Apply the sealed secret to the cluster
@@ -73,7 +73,7 @@ kubectl apply -f "$SEALED_SECRET_FILE"
 if [ $? -ne 0 ]; then
   echo "Error: Failed to apply the sealed secret."
   rm "$TEMP_SECRET_FILE" "$PUBLIC_CERT_FILE" "$SEALED_SECRET_FILE"
-  exit 1
+  return 1
 fi
 
 # Clean up temporary files
