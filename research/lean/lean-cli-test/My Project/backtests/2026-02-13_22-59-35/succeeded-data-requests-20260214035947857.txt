@@ -1,0 +1,12 @@
+/equity/usa/minute/spy/20131007_quote.zip
+/equity/usa/minute/spy/20131007_trade.zip
+/equity/usa/hour/spy.zip
+/equity/usa/minute/spy/20131008_trade.zip
+/equity/usa/minute/spy/20131008_quote.zip
+/equity/usa/minute/spy/20131009_trade.zip
+/equity/usa/minute/spy/20131009_quote.zip
+/equity/usa/minute/spy/20131010_trade.zip
+/equity/usa/minute/spy/20131010_quote.zip
+/equity/usa/minute/spy/20131011_trade.zip
+/equity/usa/minute/spy/20131011_quote.zip
+/alternative/interest-rate/usa/interest-rate.csv

@@ -1,0 +1,20 @@
+{
+    "environment": "backtesting",
+    "algorithm-type-name": "IsolatedAlgorithm",
+    "algorithm-language": "Python",
+    "algorithm-location": "/root/algorithm/main.py",
+    "data-folder": "/root/data",
+    "results-destination-folder": "/root/results",
+    
+    "environments": {
+        "backtesting": {
+            "live-mode": false,
+            "setup-handler": "QuantConnect.Lean.Engine.Setup.BacktestingSetupHandler",
+            "result-handler": "QuantConnect.Lean.Engine.Results.BacktestingResultHandler",
+            "data-feed-handler": "QuantConnect.Lean.Engine.DataFeeds.FileSystemDataFeed",
+            "real-time-handler": "QuantConnect.Lean.Engine.RealTime.BacktestingRealTimeHandler",
+            "history-provider": "QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider",
+            "transaction-handler": "QuantConnect.Lean.Engine.TransactionHandlers.BacktestingTransactionHandler"
+        }
+    }
+}
