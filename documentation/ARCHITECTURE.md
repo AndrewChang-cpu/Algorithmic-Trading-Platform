@@ -6,111 +6,137 @@ Algorithmic trading platform for paper trading and backtesting using QuantConnec
 
 ## System Architecture Diagram
 
+Resource-based view showing compute nodes and data flow:
+
 ```mermaid
 graph TB
-    subgraph "External Data Sources"
-        Alpaca[Alpaca WebSocket API<br/>Market Data]
+    subgraph External["EXTERNAL SERVICES"]
+        Alpaca[Alpaca API<br/>Market Data]
+        User[End Users<br/>Browser]
     end
 
-    subgraph "Data Ingestion Layer"
-        GoData[go-data Service<br/>Alpaca → Kafka Producer]
+    subgraph AWS["AWS CLOUD"]
+        subgraph K8s["KUBERNETES CLUSTER"]
+            subgraph Master["Control Plane<br/>t3.small"]
+                K8sAPI[Kubernetes API Server]
+            end
+
+            subgraph Workers["Worker Nodes<br/>3x t2.micro"]
+                GoApp[go-app<br/>REST API + WebSocket]
+                GoData[go-data<br/>Alpaca Consumer]
+                Redis[(Redis<br/>Job Queue)]
+            end
+
+            subgraph StrategyPods["Strategy Execution Pods<br/>Spawned dynamically"]
+                WorkerPod[Celery Worker<br/>+ LEAN Engine<br/>+ KafkaDataFeed<br/>One pod per backtest job]
+            end
+
+            subgraph KafkaNodes["Kafka Nodes<br/>3x t3.small dedicated"]
+                Kafka[Kafka Cluster<br/>KRaft]
+            end
+
+            subgraph DBNodes["Database Nodes<br/>2x t3.medium"]
+                PostgreSQL[PostgreSQL + TimescaleDB<br/>Patroni HA]
+            end
+
+            subgraph Monitoring["Monitoring<br/>Runs on worker nodes"]
+                Prometheus[Prometheus]
+                Grafana[Grafana]
+            end
+        end
+
+        S3[S3 Bucket<br/>Strategy Files]
+        ECR[ECR Registry<br/>Docker Images]
+        EBS[EBS Volumes<br/>PostgreSQL + Kafka]
     end
 
-    subgraph "Message Bus - atp-data namespace"
-        Kafka[(Kafka Cluster<br/>3 brokers<br/>stock_data topic)]
-        Zookeeper[(Zookeeper<br/>Coordination)]
-        Redis[(Redis<br/>Celery Queue)]
-        Kafka -.-> Zookeeper
+    subgraph GitOps["CI/CD"]
+        GitHub[GitHub<br/>Source + Manifests]
+        Actions[GitHub Actions<br/>Build + Push]
+        ArgoCD[ArgoCD<br/>Runs in K8s]
     end
 
-    subgraph "User Interface"
-        Browser[React Web UI<br/>Lightweight Charts]
-    end
+    %% External connections
+    User -->|HTTPS| GoApp
+    Alpaca -->|WebSocket| GoData
 
-    subgraph "API Layer - atp-core namespace"
-        GoApp[go-app REST API<br/>+ WebSocket Server<br/>Port 8080]
-    end
+    %% Data ingestion
+    GoData -->|Publish bars| Kafka
 
-    subgraph "Storage - atp-db namespace"
-        PostgreSQL[(PostgreSQL + TimescaleDB<br/>Users, Jobs, Metrics<br/>Equity Curves)]
-        S3[(S3 Bucket<br/>Strategy Files<br/>.py uploads)]
-    end
+    %% User interactions
+    GoApp -->|Store .py| S3
+    GoApp -->|Auth + Queries| PostgreSQL
+    GoApp -->|Enqueue job| Redis
 
-    subgraph "Job Execution - atp-core namespace"
-        CeleryWorker[Celery Workers<br/>Python]
-        LEANEngine[LEAN Engine<br/>Docker Container<br/>Strategy Execution]
-        KafkaFeed[KafkaDataFeed<br/>Kafka → LEAN Adapter]
-    end
+    %% Job execution
+    Redis -->|Pull task| WorkerPod
+    WorkerPod -->|Download strategy| S3
+    WorkerPod -->|Subscribe to data| Kafka
+    WorkerPod -->|Store results| PostgreSQL
 
-    subgraph "Monitoring - atp-monitoring namespace"
-        Prometheus[(Prometheus<br/>Metrics Storage)]
-        Grafana[Grafana<br/>Dashboards]
-        Loki[(Loki<br/>Log Aggregation)]
-        Promtail[Promtail<br/>Log Scraper]
-    end
+    %% Live trading updates
+    WorkerPod -->|Publish portfolio| Kafka
+    Kafka -->|Stream updates| GoApp
+    GoApp -->|WebSocket| User
 
-    subgraph "GitOps - argocd namespace"
-        ArgoCD[ArgoCD<br/>Continuous Deployment]
-        GitHub[GitHub Repository<br/>Manifests + Code]
-    end
-
-    %% Data Flow: Market Data Ingestion
-    Alpaca -->|WebSocket Stream| GoData
-    GoData -->|Publish Bars| Kafka
-
-    %% Data Flow: User Interaction
-    Browser -->|REST API| GoApp
-    Browser <-->|WebSocket<br/>Real-time Updates| GoApp
-    GoApp -->|JWT Auth| PostgreSQL
-    GoApp -->|Store Strategy| S3
-    GoApp -->|Publish Job| Redis
-    GoApp -->|Fetch Metrics| PostgreSQL
-
-    %% Data Flow: Job Execution
-    CeleryWorker -->|Pull Tasks| Redis
-    CeleryWorker -->|Download Strategy| S3
-    CeleryWorker -->|Spawn Container| LEANEngine
-    LEANEngine -->|Use Adapter| KafkaFeed
-    KafkaFeed -->|Subscribe| Kafka
-    LEANEngine -->|Results JSON<br/>90+ Metrics| CeleryWorker
-    CeleryWorker -->|Store Results| PostgreSQL
-
-    %% Data Flow: Live Trading
-    LEANEngine -->|Portfolio Updates| Kafka
-    Kafka -->|portfolio_data topic| GoApp
-
-    %% Monitoring Flow
+    %% Monitoring
     GoApp -.->|Metrics| Prometheus
-    CeleryWorker -.->|Metrics| Prometheus
+    WorkerPod -.->|Metrics| Prometheus
     Kafka -.->|Metrics| Prometheus
     PostgreSQL -.->|Metrics| Prometheus
-    Prometheus -->|Query| Grafana
+    Prometheus -->|Visualize| Grafana
 
-    GoApp -.->|Logs to /logs| Promtail
-    CeleryWorker -.->|Logs to /logs| Promtail
-    Promtail -->|Ship Logs| Loki
-    Loki -->|Query| Grafana
+    %% CI/CD
+    GitHub -->|Trigger| Actions
+    Actions -->|Build images| ECR
+    Actions -->|Update manifests| GitHub
+    GitHub -->|Auto-sync| ArgoCD
+    ArgoCD -->|Deploy| Workers
+    ArgoCD -->|Deploy| KafkaNodes
+    ArgoCD -->|Deploy| DBNodes
 
-    %% GitOps Flow
-    GitHub -->|Auto-Sync| ArgoCD
-    ArgoCD -.->|Deploy Manifests| GoApp
-    ArgoCD -.->|Deploy Manifests| CeleryWorker
-    ArgoCD -.->|Deploy Manifests| Kafka
+    %% Persistence
+    PostgreSQL -->|Data| EBS
+    Kafka -->|Logs| EBS
 
     %% Styling
     classDef external fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
-    classDef service fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef compute fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     classDef storage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef monitoring fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    classDef gitops fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef cicd fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 
-    class Alpaca external
-    class GoData,GoApp,CeleryWorker,LEANEngine,KafkaFeed service
-    class Kafka,Redis,Zookeeper,PostgreSQL,S3 storage
-    class Prometheus,Grafana,Loki,Promtail monitoring
-    class ArgoCD,GitHub gitops
-    class Browser external
+    class Alpaca,User external
+    class Master,Workers,KafkaNodes,DBNodes,StrategyPods,K8sAPI,GoApp,GoData,Redis,WorkerPod,Kafka,PostgreSQL compute
+    class S3,ECR,EBS storage
+    class Monitoring,Prometheus,Grafana monitoring
+    class GitHub,Actions,ArgoCD cicd
 ```
+
+## Key Architectural Decisions
+
+### Zookeeper Removal
+**Modern Kafka uses KRaft mode** (Kafka Raft consensus protocol), eliminating Zookeeper dependency. Benefits:
+- Simpler deployment (one less service)
+- Faster metadata operations
+- Reduced operational complexity
+
+### Celery + LEAN + KafkaDataFeed as Single Pod
+**Strategy execution runs as unified pod**:
+- Celery worker pulls job from Redis
+- Spawns LEAN engine as subprocess/container
+- KafkaDataFeed is a Python class within LEAN process
+- All three run together in same pod lifecycle
+- Pod terminates after job completes
+
+### Resource Allocation
+| Node Type | Count | Instance | Purpose |
+|-----------|-------|----------|---------|
+| Master | 1 | t3.small | Kubernetes control plane |
+| Workers | 3 | t2.micro | API, data ingestion, monitoring |
+| Kafka | 3 | t3.small | Dedicated Kafka brokers (tainted nodes) |
+| Database | 2 | t3.medium | PostgreSQL HA with Patroni |
+| Strategy Pods | Dynamic | Burstable | Spawned per backtest job, auto-scaled |
 
 ## Data Flow Scenarios
 
@@ -120,48 +146,39 @@ graph TB
 sequenceDiagram
     actor User
     participant Browser
-    participant GoApp as go-app API
+    participant GoApp as go-app
     participant S3
     participant Redis
-    participant Celery as Celery Worker
-    participant LEAN as LEAN Engine
+    participant Worker as Strategy Pod<br/>(Celery+LEAN+KafkaDataFeed)
     participant Kafka
     participant DB as PostgreSQL
 
     User->>Browser: Upload strategy.py
     Browser->>GoApp: POST /api/strategies/upload
-    GoApp->>S3: Store strategy file
+    GoApp->>S3: Store file
     GoApp->>DB: Insert strategy record
     GoApp-->>Browser: Strategy ID
 
-    User->>Browser: Submit backtest config
+    User->>Browser: Submit backtest
     Browser->>GoApp: POST /api/jobs/backtest
-    GoApp->>DB: Create job record (status=queued)
-    GoApp->>Redis: Publish Celery task
+    GoApp->>DB: Create job (status=queued)
+    GoApp->>Redis: Enqueue task
     GoApp-->>Browser: Job ID
 
-    Celery->>Redis: Pull task
-    Celery->>S3: Download strategy.py
-    Celery->>DB: Update job (status=running)
-    Celery->>LEAN: Spawn container + mount strategy
+    K8s->>Worker: Spawn pod
+    Worker->>Redis: Pull task
+    Worker->>S3: Download strategy.py
+    Worker->>DB: Update status=running
+    Worker->>Kafka: Subscribe stock_data
+    Kafka-->>Worker: Stream bars
+    Worker->>Worker: Execute LEAN strategy
+    Worker->>DB: Write metrics + equity curve
+    Worker->>DB: Update status=completed
+    K8s->>Worker: Terminate pod
 
-    LEAN->>Kafka: Subscribe to stock_data topic
-    Kafka-->>LEAN: Stream historical bars
-    LEAN->>LEAN: Execute strategy logic
-    LEAN-->>Celery: Results JSON (90+ metrics)
-
-    Celery->>DB: Insert performance_metrics
-    Celery->>DB: Insert portfolio_metrics (TimescaleDB)
-    Celery->>DB: Update job (status=completed)
-
-    Browser->>GoApp: GET /api/jobs/:id/status (poll every 2s)
-    GoApp->>DB: Query job status
-    GoApp-->>Browser: status=completed
-
-    Browser->>GoApp: GET /api/jobs/:id/metrics
-    GoApp->>DB: Query all metrics
-    GoApp-->>Browser: Full LEAN results
-    Browser->>Browser: Render dashboard (90+ metrics)
+    Browser->>GoApp: Poll /api/jobs/:id/status
+    GoApp->>DB: Query status
+    GoApp-->>Browser: Completed + metrics
 ```
 
 ### 2. Live Trading Flow
@@ -171,68 +188,61 @@ sequenceDiagram
     participant Alpaca
     participant GoData as go-data
     participant Kafka
-    participant LEAN as LEAN Engine
+    participant Worker as Strategy Pod<br/>(live mode)
     participant GoApp as go-app
     participant Browser
 
-    Alpaca->>GoData: WebSocket stream (real-time bars)
-    GoData->>Kafka: Publish to stock_data topic
+    Alpaca->>GoData: WebSocket bars
+    GoData->>Kafka: Publish stock_data
 
-    LEAN->>Kafka: Subscribe to stock_data (live mode)
-    Kafka-->>LEAN: Stream real-time bars
-    LEAN->>LEAN: Execute strategy logic
-    LEAN->>Kafka: Publish portfolio updates (portfolio_data topic)
+    Worker->>Kafka: Subscribe stock_data
+    Kafka-->>Worker: Real-time bars
+    Worker->>Worker: Execute LEAN logic
+    Worker->>Kafka: Publish portfolio_data
 
-    GoApp->>Kafka: Subscribe to portfolio_data
-    Kafka-->>GoApp: Portfolio state (equity, positions, P&L)
+    GoApp->>Kafka: Subscribe portfolio_data
+    Kafka-->>GoApp: Portfolio updates
     GoApp-->>Browser: WebSocket stream
-    Browser->>Browser: Update live dashboard (2s refresh)
 ```
 
-### 3. CI/CD Deployment Flow
+### 3. CI/CD Deployment
 
 ```mermaid
 sequenceDiagram
-    actor Developer
+    participant Dev as Developer
     participant GitHub
     participant Actions as GitHub Actions
     participant ECR
-    participant Kustomize
     participant ArgoCD
-    participant K8s as Kubernetes Cluster
+    participant K8s as Kubernetes
 
-    Developer->>GitHub: git push origin main
+    Dev->>GitHub: git push main
     GitHub->>Actions: Trigger workflow
+    Actions->>Actions: Build images
+    Actions->>ECR: Push with SHA tag
+    Actions->>GitHub: Update kustomization.yaml
 
-    Actions->>Actions: Build Docker images (go-app, celery-worker, etc.)
-    Actions->>ECR: Push images with SHA tag
-    Actions->>Kustomize: Update kustomization.yaml (newTag: SHA)
-    Actions->>GitHub: Commit kustomization changes
-
-    ArgoCD->>GitHub: Poll for changes (auto-sync)
-    ArgoCD->>ArgoCD: Detect kustomization update
-    ArgoCD->>K8s: Apply new manifests
-    K8s->>K8s: Rolling update (zero downtime)
-    ArgoCD-->>Developer: Deployment complete notification
+    ArgoCD->>GitHub: Poll (auto-sync)
+    ArgoCD->>ArgoCD: Detect change
+    ArgoCD->>K8s: Apply manifests
+    K8s->>K8s: Rolling update
 ```
 
 ## Components
 
 ### Data Ingestion
-- **go-data**: Alpaca WebSocket client → Kafka producer
-- **Kafka**: Message broker for real-time bars (topic: `stock_data`)
-- **Credentials**: `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` (Sealed Secrets)
+- **go-data**: Alpaca WebSocket client, Kafka producer
+- **Kafka**: Message broker (KRaft mode, 3 brokers), topics: `stock_data`, `portfolio_data`
 
 ### Job Orchestration
 - **Redis**: Celery job queue
-- **Celery Workers**: Python workers execute LEAN containers
-- **Job Types**: Backtest (historical) or Live (paper trading)
+- **Strategy Pods**: Dynamically spawned, contain Celery + LEAN + KafkaDataFeed
 
 ### Strategy Execution
-- **LEAN Engine**: QuantConnect backtesting engine in Docker
-- **KafkaDataFeed**: Custom adapter (Kafka → LEAN Bar objects)
-- **Output**: JSON with 90+ metrics (Sharpe, Sortino, Alpha, Beta, VaR, trade stats, etc.)
+- **LEAN Engine**: QuantConnect backtesting engine
+- **KafkaDataFeed**: Python class implementing IDataQueueHandler, subscribes to Kafka
 - **Sandboxing**: Block `os`, `subprocess`, `socket`, `eval` imports
+- **Limits**: 2 CPU cores, 4GB RAM, 30min timeout (backtests)
 
 ### Backend API (Go)
 - **go-app**: REST API + WebSocket server
@@ -245,33 +255,28 @@ sequenceDiagram
   - `WS /api/stream/portfolio/:userId` - Real-time portfolio updates
 
 ### Database
-- **PostgreSQL**: Users, strategies, jobs, performance metrics (90+ fields)
-- **TimescaleDB**: Equity curve time series (OHLC data)
+- **PostgreSQL + TimescaleDB**: Users, strategies, jobs, performance metrics (90+ fields)
 - **S3**: Strategy file storage (versioned, encrypted)
+- **EBS**: Persistent volumes for PostgreSQL and Kafka
 
-### Frontend (React)
-- **Auth**: Login/register with JWT
-- **Strategy Upload**: File upload (.py)
-- **Backtest Config**: Form (dates, cash, symbols)
-- **Results Dashboard**: Comprehensive metrics display (hero cards, tabs, equity chart)
-- **Live Trading**: Real-time WebSocket updates
+### Frontend
+- **React + TypeScript**: Web UI
+- **Lightweight Charts**: Interactive equity curves
+- **Features**: Auth, strategy upload, backtest config, comprehensive results dashboard
 
 ## Infrastructure (Kubernetes on AWS)
 
 ### Kops Cluster
-- **Master**: 1x t3.small (control plane)
-- **Workers**: 3x t2.micro (API, Celery)
-- **Kafka**: 3x t3.small (dedicated nodes, tainted)
-- **Database**: 2x t3.medium (PostgreSQL HA with Patroni)
 - **Region**: us-east-1
 - **Network**: Cilium CNI, 172.20.0.0/16 CIDR
+- **Nodes**: 1 master + 3 workers + 3 Kafka + 2 database = 9 EC2 instances
 
 ### Namespaces
-- `atp-core`: go-app, celery-workers
-- `atp-data`: kafka, zookeeper, redis
+- `atp-core`: go-app, go-data, redis, strategy pods
+- `atp-data`: kafka
 - `atp-db`: postgresql
-- `atp-monitoring`: prometheus, grafana, loki
-- `argocd`: ArgoCD (GitOps)
+- `atp-monitoring`: prometheus, grafana
+- `argocd`: ArgoCD
 
 ### Secrets Management
 - **Sealed Secrets**: Alpaca API keys, JWT secret, PostgreSQL credentials
@@ -294,7 +299,7 @@ sequenceDiagram
 
 ### Network Policies
 - Cilium NetworkPolicy: Deny egress by default
-- Allow-list: API → PostgreSQL, Workers → Kafka/S3
+- Allow-list: API to PostgreSQL, Workers to Kafka/S3
 
 ## Monitoring
 
@@ -309,9 +314,9 @@ sequenceDiagram
 - Application: Job throughput, API latency
 - Business: Active users, backtests/day
 
-### Loki Logs
+### Logs
 - All services log to `/logs` (JSON format)
-- Promtail DaemonSet scrapes pod logs
+- Loki aggregates logs from all pods
 - Retention: 30 days
 
 ### Alerts
