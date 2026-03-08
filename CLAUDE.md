@@ -66,3 +66,4 @@ Prereqs: `docker` + `docker compose` (daemon running), Python 3.10+, `pip`, Go 1
 
 **RULES**
 - Store ALL logs in /logs
+- Don't use emojis in any of your output

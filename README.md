@@ -2,7 +2,7 @@
 
 Paper trading and backtesting platform powered by QuantConnect LEAN engine.
 
-## 🚀 Quick Start
+## Quick Start
 
 **Deploy to AWS** (automated):
 ```bash
@@ -24,7 +24,7 @@ See **[documentation/QUICK_START.md](documentation/QUICK_START.md)** for complet
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 All documentation is in the **`documentation/`** folder:
 
@@ -39,7 +39,7 @@ All documentation is in the **`documentation/`** folder:
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Alpaca API → go-data → Kafka → LEAN Engine → PostgreSQL → React UI
@@ -57,7 +57,7 @@ Alpaca API → go-data → Kafka → LEAN Engine → PostgreSQL → React UI
 
 ---
 
-## 🎯 Features
+## Features
 
 ### Current
 - ✅ Real-time data ingestion (Alpaca API)
@@ -81,7 +81,7 @@ Alpaca API → go-data → Kafka → LEAN Engine → PostgreSQL → React UI
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Local Setup
 ```bash
@@ -151,7 +151,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ---
 
-## 📊 CI/CD Pipeline
+## CI/CD Pipeline
 
 1. **Developer pushes to main**
 2. **GitHub Actions builds Docker images** → Push to ECR
@@ -163,7 +163,7 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md) for complete setu
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 .
@@ -185,7 +185,7 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md) for complete setu
 
 ---
 
-## 💰 Cost Estimate
+## Cost Estimate
 
 **AWS Monthly**: ~$290 (optimized)
 
@@ -197,7 +197,7 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md) for complete setu
 
 ---
 
-## 🚢 Deployment
+## Deployment
 
 ### Automated
 ```bash
@@ -214,7 +214,7 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md)
 
 ---
 
-## 📖 Learning Resources
+## Learning Resources
 
 - **QuantConnect LEAN**: https://www.quantconnect.com/docs/
 - **Kubernetes**: https://kubernetes.io/docs/
@@ -223,7 +223,7 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md)
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Read [documentation/DEVELOPMENT.md](documentation/DEVELOPMENT.md)
 2. Create feature branch
@@ -232,13 +232,13 @@ See [documentation/DEPLOYMENT.md](documentation/DEPLOYMENT.md)
 
 ---
 
-## 📝 License
+## License
 
 MIT
 
 ---
 
-## 📬 Support
+## Support
 
 - Documentation: `documentation/` folder
 - Issues: GitHub Issues

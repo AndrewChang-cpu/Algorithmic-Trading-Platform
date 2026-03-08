@@ -3,7 +3,12 @@
     "allow": [
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(for file in *.md)",
+      "Bash(do sed -i 's/[^\\x00-\\x7F]//g' \"$file\")",
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(python3:*)"
     ]
   }
 }
