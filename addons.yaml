@@ -1,0 +1,20 @@
+kind: Addons
+metadata:
+  name: algo-trading-addons
+spec:
+  addons:
+  - name: external-secrets
+    version: 0.9.18
+    selector:
+      k8s-addon: external-secrets
+    manifest: external-secrets/v0.9.18.yaml
+  - name: argocd
+    version: 2.11.0
+    selector:
+      k8s-addon: argocd
+    manifest: argocd/v2.11.0.yaml
+  - name: trading-platform
+    version: 1.0.0
+    selector:
+      k8s-addon: trading-platform
+    manifest: trading-platform/v1.0.0.yaml

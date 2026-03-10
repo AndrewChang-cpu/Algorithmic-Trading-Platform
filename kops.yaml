@@ -33,6 +33,30 @@ spec:
   iam:
     allowContainerRegistry: true
     legacy: false
+  addons:
+  - manifest: s3://kops-config-algo-trading/addons/addons.yaml
+  additionalPolicies:
+    node: |
+      [
+        {
+          "Effect": "Allow",
+          "Action": ["ssm:GetParameter", "ssm:GetParameters"],
+          "Resource": ["arn:aws:ssm:us-east-1:299897922160:parameter/atp/*"]
+        },
+        {
+          "Effect": "Allow",
+          "Action": ["kms:Decrypt"],
+          "Resource": ["arn:aws:kms:us-east-1:299897922160:key/31759851-01a7-44cd-ac2e-e1637b582344"]
+        }
+      ]
+    master: |
+      [
+        {
+          "Effect": "Allow",
+          "Action": ["s3:GetObject"],
+          "Resource": ["arn:aws:s3:::kops-config-algo-trading/addons/*"]
+        }
+      ]
   kubeProxy:
     enabled: false
   kubelet:
