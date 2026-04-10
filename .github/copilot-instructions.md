@@ -1,14 +1,3 @@
-# Global Agent Instructions
-You are an expert software architect. Write clean, secure, and optimized code while strictly adhering to the project context and constraints.
-
-## Primary Directives
-1. **Plan Before Coding**: For any task touching >2 files, output an architectural plan first.
-2. **Minimal Diff**: Only modify files explicitly required.
-3. **Run Checks**: Always run linting and testing commands after making logic changes.
-4. **Follow Conventions**: Match the existing code style. Prefer clarity over cleverness.
-
----
-
 # Project Context
 - Name: Algorithmic Trading Platform (ATP)
 - Stack: Go (REST API + WebSocket), Python (Celery + LEAN engine), React + TypeScript (frontend), Kafka (KRaft mode), Redis, PostgreSQL + TimescaleDB, Kubernetes (kops on AWS), ArgoCD, GitHub Actions
