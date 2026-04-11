@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Live Trading</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #21262d; display: flex; flex-direction: column; height: 100vh; }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 30px; height: 30px; background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #fff; letter-spacing: -0.5px; flex-shrink: 0; }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; line-height: 1.2; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; line-height: 1.2; }
+    .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section-label { padding: 10px 16px 4px; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; color: #8b949e; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.12s ease; border-left: 2px solid transparent; }
+    .nav-item:hover { background: rgba(33,38,45,0.8); color: #c9d1d9; }
+    .nav-item.active { background: rgba(56,139,253,0.08); color: #388bfd; border-left-color: #388bfd; }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-badge { margin-left: auto; background: #21262d; color: #8b949e; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+    .nav-item.active .nav-badge { background: rgba(56,139,253,0.15); color: #388bfd; }
+    .nav-live-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: #3fb950; animation: live-pulse 2s infinite; }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+    }
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+    .sidebar-bottom { padding: 12px 16px; border-top: 1px solid #21262d; display: flex; align-items: center; gap: 9px; }
+    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #388bfd, #1f6feb); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 12px; font-weight: 600; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .topbar { height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d1117; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .live-clock { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #3fb950; display: flex; align-items: center; gap: 5px; }
+    .live-clock-dot { width: 6px; height: 6px; border-radius: 50%; background: #3fb950; animation: live-pulse 2s infinite; }
+
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.12s ease; white-space: nowrap; }
+    .btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; border-color: #484f58; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-danger { background: transparent; border-color: rgba(248,81,73,0.3); color: #f85149; }
+    .btn-danger:hover { background: rgba(248,81,73,0.08); }
+    .btn-warn { background: transparent; border-color: rgba(210,153,34,0.3); color: #d29922; }
+    .btn-warn:hover { background: rgba(210,153,34,0.08); }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    /* ── LIVE LAYOUT: strategies list + detail panel ── */
+    .live-body { flex: 1; display: flex; overflow: hidden; }
+
+    /* LEFT PANEL */
+    .strategies-panel {
+      width: 260px; min-width: 260px; border-right: 1px solid #21262d;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .sp-header {
+      padding: 10px 14px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .sp-title { font-size: 11px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .sp-list { flex: 1; overflow-y: auto; }
+
+    .strategy-card {
+      padding: 12px 14px; border-bottom: 1px solid #21262d;
+      cursor: pointer; transition: background 0.1s;
+      border-left: 2px solid transparent;
+    }
+    .strategy-card:hover { background: rgba(33,38,45,0.5); }
+    .strategy-card.selected { background: rgba(56,139,253,0.05); border-left-color: #388bfd; }
+    .sc-name-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .sc-name { font-size: 12px; font-weight: 600; color: #e6edf3; }
+    .sc-pnl { font-size: 12px; font-weight: 700; }
+    .sc-meta { display: flex; align-items: center; gap: 8px; }
+    .sc-meta-item { font-size: 10px; color: #6e7681; display: flex; align-items: center; gap: 3px; }
+    .sc-meta-item svg { width: 10px; height: 10px; }
+    .sc-status { display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; }
+    .sc-status.running { color: #3fb950; }
+    .sc-status-dot { width: 5px; height: 5px; border-radius: 50%; background: #3fb950; animation: live-pulse 2s infinite; }
+    .sc-pnl-bar { margin-top: 7px; height: 2px; background: #21262d; border-radius: 1px; overflow: hidden; }
+    .sc-pnl-bar-fill { height: 100%; border-radius: 1px; }
+
+    .sp-empty {
+      padding: 32px 14px; text-align: center; color: #6e7681; font-size: 11px;
+    }
+    .btn-add-live {
+      margin: 10px 14px; width: calc(100% - 28px); display: flex; align-items: center; justify-content: center;
+      gap: 5px; padding: 7px; border-radius: 6px; border: 1px dashed #30363d;
+      color: #6e7681; font-size: 11px; cursor: pointer; transition: all 0.12s; background: transparent;
+      font-family: inherit;
+    }
+    .btn-add-live:hover { border-color: #388bfd; color: #388bfd; background: rgba(56,139,253,0.05); }
+    .btn-add-live svg { width: 12px; height: 12px; }
+
+    /* RIGHT PANEL */
+    .detail-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Detail header */
+    .detail-header {
+      padding: 12px 18px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .dh-left { display: flex; align-items: center; gap: 10px; }
+    .dh-title { font-size: 15px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+    .dh-sub { font-size: 11px; color: #6e7681; }
+    .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .s-live { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-live .status-dot { background: #3fb950; animation: live-pulse 2s infinite; }
+    .dh-right { display: flex; align-items: center; gap: 6px; }
+    .btn-divider { width: 1px; height: 20px; background: #21262d; margin: 0 2px; }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex; border-bottom: 1px solid #21262d; flex-shrink: 0;
+    }
+    .stat-cell {
+      flex: 1; padding: 10px 18px; border-right: 1px solid #21262d;
+    }
+    .stat-cell:last-child { border-right: none; }
+    .stat-label { font-size: 10px; color: #6e7681; margin-bottom: 3px; }
+    .stat-value { font-size: 16px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; line-height: 1; }
+    .stat-sub { font-size: 10px; color: #6e7681; margin-top: 2px; }
+
+    /* Detail scrollable area */
+    .detail-scroll { flex: 1; overflow-y: auto; padding: 14px 18px 32px; }
+
+    /* Chart card */
+    .chart-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 12px;
+    }
+    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .chart-title { font-size: 12px; font-weight: 700; color: #e6edf3; }
+    .chart-controls { display: flex; gap: 4px; }
+    .chart-ctrl {
+      padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 500; cursor: pointer;
+      border: 1px solid #21262d; background: transparent; color: #6e7681; font-family: inherit;
+      transition: all 0.1s;
+    }
+    .chart-ctrl.active { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #388bfd; }
+    .chart-ctrl:hover { background: #21262d; color: #c9d1d9; }
+
+    .equity-svg { width: 100%; display: block; }
+
+    /* Tabs */
+    .tab-bar {
+      display: flex; gap: 0; border-bottom: 1px solid #21262d; margin-bottom: 12px; flex-shrink: 0;
+    }
+    .tab {
+      padding: 8px 14px; font-size: 12px; font-weight: 500; color: #6e7681;
+      cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: #c9d1d9; }
+    .tab.active { color: #388bfd; border-bottom-color: #388bfd; }
+
+    /* Tables */
+    .table-card { background: #161b22; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+    .table-card-header { padding: 10px 14px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; }
+    .tc-title { font-size: 11px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.6px; }
+    .tc-count { font-size: 10px; color: #6e7681; background: #21262d; padding: 1px 6px; border-radius: 10px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th { padding: 7px 14px; text-align: left; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.6px; border-bottom: 1px solid #21262d; background: #161b22; white-space: nowrap; }
+    thead th.right { text-align: right; }
+    tbody tr { border-bottom: 1px solid #21262d; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 8px 14px; font-size: 12px; color: #c9d1d9; vertical-align: middle; }
+    tbody td.right { text-align: right; }
+    tbody td.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; }
+
+    .pnl-positive { color: #3fb950; font-weight: 600; }
+    .pnl-negative { color: #f85149; font-weight: 600; }
+    .side-buy { color: #3fb950; font-weight: 600; font-size: 10px; background: rgba(63,185,80,0.1); padding: 1px 6px; border-radius: 4px; }
+    .side-sell { color: #f85149; font-weight: 600; font-size: 10px; background: rgba(248,81,73,0.1); padding: 1px 6px; border-radius: 4px; }
+    .fill-filled { color: #3fb950; font-size: 10px; }
+    .fill-partial { color: #d29922; font-size: 10px; }
+
+    .symbol-cell { font-weight: 600; color: #e6edf3; font-family: 'SF Mono', 'Consolas', monospace; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">ATP</div>
+    <div>
+      <div class="logo-text-primary">AlgoTrader</div>
+      <div class="logo-text-secondary">Algorithmic Trading Platform</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Platform</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.75a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h13a.25.25 0 00.25-.25V3.5H12a.5.5 0 01-.5-.5V1.5H1.75z"/></svg>
+      Overview
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8A1 1 0 003 13.5v.75A1.75 1.75 0 011.25 16h-.5A1.75 1.75 0 010 14.25v-12A2.5 2.5 0 012 2.5z"/></svg>
+      Strategies
+      <span class="nav-badge">6</span>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Trading</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/></svg>
+      Backtests
+      <span class="nav-badge">47</span>
+    </div>
+    <div class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/><path d="M6.5 5.5a.5.5 0 011 0v2.793l1.854 1.853a.5.5 0 01-.708.708l-2-2A.5.5 0 016.5 8.5V5.5z"/></svg>
+      Live Trading
+      <div class="nav-live-dot"></div>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Account</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M10.561 8.073a6.005 6.005 0 013.432 4.177.75.75 0 11-1.494.15 4.5 4.5 0 00-8.997 0 .75.75 0 01-1.494-.15 6.005 6.005 0 013.432-4.177 3.5 3.5 0 111.121 0z"/></svg>
+      Profile
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.417.278.97.423 1.53.281l1.086-.328a.158.158 0 01.161.045 6.414 6.414 0 01.792.979.158.158 0 01-.01.161l-.69.904c-.359.471-.43 1.051-.244 1.557.07.192.127.387.17.584.117.554.491.977.966 1.215l1.005.558a.158.158 0 01.086.144 6.602 6.602 0 010 1.141.158.158 0 01-.09.137l-1.008.553c-.476.233-.853.658-.966 1.21a5.963 5.963 0 01-.17.585c-.187.507-.115 1.086.244 1.557l.69.904a.158.158 0 01.008.161 6.414 6.414 0 01-.793.979.158.158 0 01-.16.044l-1.087-.327c-.56-.142-1.113 0-1.53.28-.16.107-.327.204-.5.29-.449.222-.851.628-.999 1.188l-.289 1.105c-.029.11-.1.143-.137.146a6.6 6.6 0 01-1.142 0c-.036-.003-.108-.037-.137-.146l-.289-1.105c-.148-.56-.55-.966-.999-1.188a5.39 5.39 0 01-.5-.29c-.417-.278-.97-.423-1.529-.28l-1.088.327a.158.158 0 01-.16-.045 6.41 6.41 0 01-.792-.978.158.158 0 01.008-.161l.69-.904c.36-.471.43-1.05.244-1.557a5.949 5.949 0 01-.17-.585c-.117-.552-.49-.977-.966-1.21l-1.008-.553a.158.158 0 01-.09-.137 6.597 6.597 0 010-1.141.158.158 0 01.086-.144l1.005-.558c.475-.238.849-.661.966-1.215.043-.197.1-.392.17-.584.187-.507.115-1.086-.244-1.557l-.69-.904a.158.158 0 01-.008-.16 6.414 6.414 0 01.792-.98.158.158 0 01.161-.044l1.086.328c.56.142 1.113 0 1.53-.281.16-.107.327-.204.5-.29.449-.222.851-.628.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>
+      Settings
+    </div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="user-avatar">AK</div>
+    <div class="user-info">
+      <div class="user-name">Andrew K.</div>
+      <div class="user-plan">Pro plan</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="page-title">Live Trading</span>
+      <span class="status-badge s-live" style="margin-left:4px;"><span class="status-dot"></span>2 Active</span>
+    </div>
+    <div class="topbar-right">
+      <div class="live-clock">
+        <span class="live-clock-dot"></span>
+        <span id="clockDisplay">09:34:21 EST</span>
+      </div>
+      <button class="btn btn-primary" onclick="openDeployModal()">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+        Deploy Strategy
+      </button>
+    </div>
+  </div>
+
+  <div class="live-body">
+
+    <!-- LEFT: strategy list -->
+    <div class="strategies-panel">
+      <div class="sp-header">
+        <span class="sp-title">Active Strategies</span>
+        <span style="font-size:10px;color:#6e7681;">2 running</span>
+      </div>
+      <div class="sp-list">
+
+        <!-- Strategy 1 — selected -->
+        <div class="strategy-card selected" onclick="selectStrategy(0)">
+          <div class="sc-name-row">
+            <span class="sc-name">MA Crossover</span>
+            <span class="sc-pnl pnl-positive">+$2,341</span>
+          </div>
+          <div class="sc-meta">
+            <span class="sc-status running">
+              <span class="sc-status-dot"></span>Running
+            </span>
+            <span class="sc-meta-item">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0z"/></svg>
+              3h 4m
+            </span>
+            <span class="sc-meta-item">4 pos</span>
+            <span class="sc-meta-item" style="margin-left:auto; color:#3fb950; font-weight:600;">+2.34%</span>
+          </div>
+          <div class="sc-pnl-bar">
+            <div class="sc-pnl-bar-fill" style="width:65%; background:#3fb950;"></div>
+          </div>
+        </div>
+
+        <!-- Strategy 2 -->
+        <div class="strategy-card" onclick="selectStrategy(1)">
+          <div class="sc-name-row">
+            <span class="sc-name">RSI Mean Reversion</span>
+            <span class="sc-pnl pnl-positive">+$481</span>
+          </div>
+          <div class="sc-meta">
+            <span class="sc-status running">
+              <span class="sc-status-dot"></span>Running
+            </span>
+            <span class="sc-meta-item">
+              <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0z"/></svg>
+              1h 2m
+            </span>
+            <span class="sc-meta-item">3 pos</span>
+            <span class="sc-meta-item" style="margin-left:auto; color:#3fb950; font-weight:600;">+0.96%</span>
+          </div>
+          <div class="sc-pnl-bar">
+            <div class="sc-pnl-bar-fill" style="width:28%; background:#3fb950;"></div>
+          </div>
+        </div>
+
+      </div><!-- end sp-list -->
+
+      <button class="btn-add-live" onclick="openDeployModal()">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+        Deploy new strategy
+      </button>
+    </div><!-- end strategies-panel -->
+
+    <!-- RIGHT: detail panel -->
+    <div class="detail-panel">
+
+      <!-- Detail header -->
+      <div class="detail-header">
+        <div class="dh-left">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+              <span class="dh-title">MA Crossover</span>
+              <span class="status-badge s-live"><span class="status-dot"></span>Live</span>
+            </div>
+            <span class="dh-sub">live_x9k2m1 &nbsp;·&nbsp; Deployed today 09:31:02 EST &nbsp;·&nbsp; $100,000 capital</span>
+          </div>
+        </div>
+        <div class="dh-right">
+          <button class="btn btn-ghost">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1z"/></svg>
+            Logs
+          </button>
+          <div class="btn-divider"></div>
+          <button class="btn btn-warn">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.75C2 1.784 2.784 1 3.75 1h8.5C13.216 1 14 1.784 14 2.75v10.5A1.75 1.75 0 0112.25 15h-8.5A1.75 1.75 0 012 13.25V2.75z"/></svg>
+            Pause
+          </button>
+          <button class="btn btn-danger">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.28 3.22a.75.75 0 00-1.06 1.06L6.94 8l-3.72 3.72a.75.75 0 101.06 1.06L8 9.06l3.72 3.72a.75.75 0 101.06-1.06L9.06 8l3.72-3.72a.75.75 0 00-1.06-1.06L8 6.94 4.28 3.22z"/></svg>
+            Stop Strategy
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-cell">
+          <div class="stat-label">Portfolio Value</div>
+          <div class="stat-value">$102,341</div>
+          <div class="stat-sub">+$2,341 today</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Unrealized P&L</div>
+          <div class="stat-value" style="color:#3fb950;">+$1,847</div>
+          <div class="stat-sub">+1.85%</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Realized P&L</div>
+          <div class="stat-value" style="color:#3fb950;">+$494</div>
+          <div class="stat-sub">today</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Open Positions</div>
+          <div class="stat-value">4</div>
+          <div class="stat-sub">2 long · 2 flat</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Orders Today</div>
+          <div class="stat-value">12</div>
+          <div class="stat-sub">10 filled · 2 pending</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Fees Today</div>
+          <div class="stat-value" style="color:#f85149;">-$6.24</div>
+          <div class="stat-sub">0.006%</div>
+        </div>
+      </div>
+
+      <!-- Scrollable detail content -->
+      <div class="detail-scroll">
+
+        <!-- Equity Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Equity Curve — Today</span>
+            <div class="chart-controls">
+              <button class="chart-ctrl active">1m</button>
+              <button class="chart-ctrl">5m</button>
+              <button class="chart-ctrl">15m</button>
+              <button class="chart-ctrl">1h</button>
+            </div>
+          </div>
+          <!-- SVG line chart: equity today from 09:31 to ~09:34 -->
+          <svg class="equity-svg" viewBox="0 0 720 140" xmlns="http://www.w3.org/2000/svg" style="height:140px;">
+            <defs>
+              <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3fb950" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#3fb950" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="equityLine" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#388bfd"/>
+                <stop offset="100%" stop-color="#3fb950"/>
+              </linearGradient>
+            </defs>
+            <!-- Grid lines -->
+            <line x1="0" y1="110" x2="720" y2="110" stroke="#21262d" stroke-width="1"/>
+            <line x1="0" y1="80" x2="720" y2="80" stroke="#21262d" stroke-width="1"/>
+            <line x1="0" y1="50" x2="720" y2="50" stroke="#21262d" stroke-width="1"/>
+            <line x1="0" y1="20" x2="720" y2="20" stroke="#21262d" stroke-width="1"/>
+            <!-- Y axis labels -->
+            <text x="6" y="114" font-size="9" fill="#6e7681" font-family="monospace">$100k</text>
+            <text x="6" y="84" font-size="9" fill="#6e7681" font-family="monospace">$101k</text>
+            <text x="6" y="54" font-size="9" fill="#6e7681" font-family="monospace">$102k</text>
+            <text x="6" y="24" font-size="9" fill="#6e7681" font-family="monospace">$103k</text>
+            <!-- Baseline $100k dashed -->
+            <line x1="50" y1="110" x2="720" y2="110" stroke="#388bfd" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+            <!-- Equity area fill -->
+            <path d="M50,110 L80,108 L120,103 L160,99 L200,101 L240,96 L280,91 L320,88 L360,85 L400,83 L440,79 L480,76 L520,72 L560,68 L600,65 L640,60 L680,57 L720,52 L720,110 Z"
+              fill="url(#equityGrad)"/>
+            <!-- Equity line -->
+            <path d="M50,110 L80,108 L120,103 L160,99 L200,101 L240,96 L280,91 L320,88 L360,85 L400,83 L440,79 L480,76 L520,72 L560,68 L600,65 L640,60 L680,57 L720,52"
+              fill="none" stroke="url(#equityLine)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- Current value dot -->
+            <circle cx="720" cy="52" r="4" fill="#3fb950" stroke="#0d1117" stroke-width="2"/>
+            <!-- X axis labels -->
+            <text x="47" y="130" font-size="9" fill="#6e7681" font-family="monospace" text-anchor="middle">09:31</text>
+            <text x="220" y="130" font-size="9" fill="#6e7681" font-family="monospace" text-anchor="middle">09:32</text>
+            <text x="390" y="130" font-size="9" fill="#6e7681" font-family="monospace" text-anchor="middle">09:33</text>
+            <text x="560" y="130" font-size="9" fill="#6e7681" font-family="monospace" text-anchor="middle">09:34</text>
+            <text x="718" y="130" font-size="9" fill="#6e7681" font-family="monospace" text-anchor="end">now</text>
+            <!-- Current value label -->
+            <rect x="630" y="42" width="68" height="16" rx="3" fill="#161b22" stroke="#21262d"/>
+            <text x="664" y="54" font-size="10" fill="#3fb950" font-family="monospace" font-weight="700" text-anchor="middle">$102,341</text>
+          </svg>
+        </div>
+
+        <!-- Open Positions -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="tc-title">Open Positions</span>
+            <span class="tc-count">4</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th class="right">Qty</th>
+                <th class="right">Entry Price</th>
+                <th class="right">Mark Price</th>
+                <th class="right">Unrealized P&L</th>
+                <th class="right">Return</th>
+                <th class="right">Market Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="symbol-cell">SPY</span></td>
+                <td><span class="side-buy">LONG</span></td>
+                <td class="right mono">200</td>
+                <td class="right mono">$451.22</td>
+                <td class="right mono">$455.84</td>
+                <td class="right"><span class="pnl-positive">+$924.00</span></td>
+                <td class="right"><span class="pnl-positive">+1.02%</span></td>
+                <td class="right mono">$91,168</td>
+              </tr>
+              <tr>
+                <td><span class="symbol-cell">QQQ</span></td>
+                <td><span class="side-buy">LONG</span></td>
+                <td class="right mono">50</td>
+                <td class="right mono">$378.10</td>
+                <td class="right mono">$381.50</td>
+                <td class="right"><span class="pnl-positive">+$170.00</span></td>
+                <td class="right"><span class="pnl-positive">+0.90%</span></td>
+                <td class="right mono">$19,075</td>
+              </tr>
+              <tr>
+                <td><span class="symbol-cell">AAPL</span></td>
+                <td><span class="side-buy">LONG</span></td>
+                <td class="right mono">30</td>
+                <td class="right mono">$189.40</td>
+                <td class="right mono">$191.83</td>
+                <td class="right"><span class="pnl-positive">+$72.90</span></td>
+                <td class="right"><span class="pnl-positive">+1.28%</span></td>
+                <td class="right mono">$5,754</td>
+              </tr>
+              <tr>
+                <td><span class="symbol-cell">MSFT</span></td>
+                <td><span class="side-buy">LONG</span></td>
+                <td class="right mono">20</td>
+                <td class="right mono">$415.60</td>
+                <td class="right mono">$414.40</td>
+                <td class="right"><span class="pnl-negative">-$24.00</span></td>
+                <td class="right"><span class="pnl-negative">-0.29%</span></td>
+                <td class="right mono">$8,288</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Recent Order Fills -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <span class="tc-title">Recent Order Fills</span>
+            <span class="tc-count">12 today</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Symbol</th>
+                <th>Side</th>
+                <th class="right">Qty</th>
+                <th class="right">Fill Price</th>
+                <th class="right">Fee</th>
+                <th>Status</th>
+                <th>Order ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:34:08</td>
+                <td><span class="symbol-cell">MSFT</span></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="right mono">20</td>
+                <td class="right mono">$415.60</td>
+                <td class="right mono" style="color:#f85149;">-$0.42</td>
+                <td><span class="fill-filled">Filled</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_9f2b</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:33:51</td>
+                <td><span class="symbol-cell">AAPL</span></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="right mono">30</td>
+                <td class="right mono">$189.40</td>
+                <td class="right mono" style="color:#f85149;">-$0.57</td>
+                <td><span class="fill-filled">Filled</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_8c1a</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:33:22</td>
+                <td><span class="symbol-cell">QQQ</span></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="right mono">50</td>
+                <td class="right mono">$378.10</td>
+                <td class="right mono" style="color:#f85149;">-$0.95</td>
+                <td><span class="fill-filled">Filled</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_7d4e</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:32:47</td>
+                <td><span class="symbol-cell">SPY</span></td>
+                <td><span class="side-sell">SELL</span></td>
+                <td class="right mono">100</td>
+                <td class="right mono">$453.90</td>
+                <td class="right mono" style="color:#f85149;">-$0.91</td>
+                <td><span class="fill-filled">Filled</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_6b3f</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:31:55</td>
+                <td><span class="symbol-cell">SPY</span></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="right mono">300</td>
+                <td class="right mono">$451.22</td>
+                <td class="right mono" style="color:#f85149;">-$1.35</td>
+                <td><span class="fill-filled">Filled</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_5a2c</td>
+              </tr>
+              <tr>
+                <td class="mono" style="color:#8b949e;">09:31:12</td>
+                <td><span class="symbol-cell">SPY</span></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="right mono">200</td>
+                <td class="right mono">$450.80</td>
+                <td class="right mono" style="color:#f85149;">-$0.90</td>
+                <td><span class="fill-partial">Partial</span></td>
+                <td class="mono" style="color:#6e7681; font-size:10px;">ord_4e9d</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Live Logs -->
+        <div class="table-card" id="logsCard">
+          <div class="table-card-header" style="display:flex;align-items:center;gap:8px;">
+            <span class="tc-title" style="display:flex;align-items:center;gap:6px;">
+              <span class="sc-status-dot" style="width:6px;height:6px;border-radius:50%;background:#3fb950;animation:live-pulse 2s infinite;flex-shrink:0;display:inline-block;"></span>
+              Live Logs
+            </span>
+            <span class="tc-count" id="logCount">12</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+              <select id="logLevelFilter" onchange="filterLogs()" style="background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:2px 8px;color:#8b949e;font-size:11px;outline:none;font-family:inherit;">
+                <option value="ALL">All Levels</option>
+                <option value="INFO">INFO</option>
+                <option value="WARN">WARN</option>
+                <option value="ERROR">ERROR</option>
+                <option value="DEBUG">DEBUG</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:#6e7681;cursor:pointer;user-select:none;">
+                <input type="checkbox" id="autoScroll" checked style="accent-color:#388bfd;width:12px;height:12px;"/>
+                Auto-scroll
+              </label>
+              <button onclick="clearLogs()" style="background:transparent;border:1px solid #21262d;border-radius:5px;padding:2px 9px;color:#6e7681;font-size:11px;cursor:pointer;font-family:inherit;transition:all 0.1s;" onmouseover="this.style.color='#c9d1d9'" onmouseout="this.style.color='#6e7681'">Clear</button>
+            </div>
+          </div>
+          <div id="logTerminal" style="background:#010409;font-family:'SF Mono','Consolas','Fira Code',monospace;font-size:11.5px;line-height:1.65;height:220px;overflow-y:auto;padding:8px 14px;">
+            <!-- seeded log entries -->
+          </div>
+        </div>
+
+      </div><!-- end detail-scroll -->
+    </div><!-- end detail-panel -->
+
+  </div><!-- end live-body -->
+</div><!-- end main -->
+
+<!-- DEPLOY MODAL -->
+<div id="deployModal" style="display:none; position:fixed; inset:0; background:rgba(1,4,9,0.75); z-index:100; align-items:center; justify-content:center; backdrop-filter:blur(2px);">
+  <div style="background:#161b22; border:1px solid #30363d; border-radius:12px; width:480px; max-width:95vw; box-shadow:0 24px 80px rgba(0,0,0,0.6);">
+    <div style="padding:14px 18px; border-bottom:1px solid #21262d; display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-size:14px; font-weight:700; color:#e6edf3;">Deploy Strategy — Live</span>
+      <button onclick="document.getElementById('deployModal').style.display='none';" style="background:transparent; border:1px solid #30363d; border-radius:6px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; color:#6e7681; cursor:pointer;">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+      </button>
+    </div>
+    <div style="padding:18px;">
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:11px; font-weight:600; color:#6e7681; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px;">Strategy</label>
+        <select style="width:100%; background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:7px 10px; color:#c9d1d9; font-size:13px; outline:none; font-family:inherit;">
+          <option>MA Crossover</option>
+          <option>Pairs Trading ETF</option>
+          <option>RSI Mean Reversion</option>
+          <option>SPY Buy-and-Hold</option>
+          <option>Momentum Breakout</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:11px; font-weight:600; color:#6e7681; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px;">Capital to Deploy</label>
+        <div style="position:relative;">
+          <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#6e7681; font-size:13px;">$</span>
+          <input type="text" value="100,000" style="width:100%; background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:7px 10px 7px 22px; color:#c9d1d9; font-size:13px; outline:none; font-family:'SF Mono','Consolas',monospace;"/>
+        </div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:11px; font-weight:600; color:#6e7681; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px;">Broker</label>
+        <select style="width:100%; background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:7px 10px; color:#c9d1d9; font-size:13px; outline:none; font-family:inherit;">
+          <option>Alpaca (Paper Trading)</option>
+          <option>Alpaca (Live)</option>
+        </select>
+      </div>
+      <div style="background:rgba(210,153,34,0.08); border:1px solid rgba(210,153,34,0.25); border-radius:6px; padding:10px 12px; margin-bottom:16px; font-size:11px; color:#d29922; display:flex; gap:8px; align-items:flex-start;">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0;margin-top:1px;"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm7.25-3.75a.75.75 0 011.5 0v3.5a.75.75 0 01-1.5 0v-3.5zm.75 7a1 1 0 100-2 1 1 0 000 2z"/></svg>
+        Live trading uses real capital. Ensure your strategy has been validated and backtested before deploying.
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button onclick="document.getElementById('deployModal').style.display='none';" style="background:transparent; border:1px solid #30363d; border-radius:6px; padding:6px 14px; color:#8b949e; font-size:12px; cursor:pointer; font-family:inherit;">Cancel</button>
+        <button style="background:#1f6feb; border:1px solid #1f6feb; border-radius:6px; padding:6px 14px; color:#fff; font-size:12px; font-weight:500; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:5px;">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4.53 4.75A.75.75 0 015.28 4h5.44a.75.75 0 01.75.75v5.44a.75.75 0 01-1.5 0V6.31l-4.72 4.72a.75.75 0 01-1.06-1.06l4.72-4.72H5.28a.75.75 0 01-.75-.75z"/></svg>
+          Deploy Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openDeployModal() {
+    document.getElementById('deployModal').style.display = 'flex';
+  }
+  document.getElementById('deployModal').addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+  function selectStrategy(idx) {
+    document.querySelectorAll('.strategy-card').forEach((c,i) => {
+      c.classList.toggle('selected', i === idx);
+    });
+  }
+
+  // Live clock
+  function updateClock() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clockDisplay').textContent = `${h}:${m}:${s} EST`;
+  }
+  setInterval(updateClock, 1000);
+
+  // ── STREAMING LOGS ──
+  const LOG_COLORS = {
+    INFO:  { bg:'rgba(56,139,253,0.12)',  text:'#388bfd',  border:'rgba(56,139,253,0.2)'  },
+    WARN:  { bg:'rgba(210,153,34,0.12)',  text:'#d29922',  border:'rgba(210,153,34,0.2)'  },
+    ERROR: { bg:'rgba(248,81,73,0.12)',   text:'#f85149',  border:'rgba(248,81,73,0.2)'   },
+    DEBUG: { bg:'rgba(110,118,129,0.10)', text:'#6e7681',  border:'rgba(110,118,129,0.2)' },
+  };
+
+  const SEED_LOGS = [
+    { time:'09:31:02', level:'INFO',  msg:'Strategy initialized — <b style="color:#e6edf3">MA Crossover</b> &nbsp;|&nbsp; Capital: $100,000 &nbsp;|&nbsp; Broker: Alpaca Paper' },
+    { time:'09:31:02', level:'INFO',  msg:'Kafka consumer connected &nbsp;|&nbsp; topic: <b style="color:#e6edf3">stock_data</b> &nbsp;|&nbsp; partition: 0 &nbsp;|&nbsp; offset: 9842311' },
+    { time:'09:31:04', level:'DEBUG', msg:'Received bar: SPY O=450.80 H=451.20 L=450.40 C=451.00 V=2,142,881' },
+    { time:'09:31:06', level:'DEBUG', msg:'MA(5)=450.82 &nbsp;|&nbsp; MA(20)=449.14 &nbsp;|&nbsp; delta=+1.68 &nbsp;|&nbsp; threshold=0.5' },
+    { time:'09:31:12', level:'INFO',  msg:'Signal: <b style="color:#3fb950">BULLISH</b> crossover detected &nbsp;|&nbsp; MA(5) crossed above MA(20)' },
+    { time:'09:31:12', level:'INFO',  msg:'Order submitted: <b style="color:#3fb950">BUY</b> 200 <b style="color:#e6edf3">SPY</b> @ MARKET &nbsp;|&nbsp; id: ord_4e9d' },
+    { time:'09:31:12', level:'INFO',  msg:'Order partial fill: ord_4e9d &nbsp;|&nbsp; 200/200 filled @ $450.80 &nbsp;|&nbsp; fee: $0.90' },
+    { time:'09:31:55', level:'INFO',  msg:'Order submitted: <b style="color:#3fb950">BUY</b> 300 <b style="color:#e6edf3">SPY</b> @ MARKET &nbsp;|&nbsp; id: ord_5a2c' },
+    { time:'09:31:55', level:'INFO',  msg:'Order filled: ord_5a2c &nbsp;|&nbsp; 300/300 @ $451.22 &nbsp;|&nbsp; fee: $1.35' },
+    { time:'09:32:47', level:'INFO',  msg:'Signal: rebalance triggered &nbsp;|&nbsp; selling excess SPY position' },
+    { time:'09:32:47', level:'INFO',  msg:'Order submitted: <b style="color:#f85149">SELL</b> 100 <b style="color:#e6edf3">SPY</b> @ MARKET &nbsp;|&nbsp; id: ord_6b3f' },
+    { time:'09:32:47', level:'INFO',  msg:'Order filled: ord_6b3f &nbsp;|&nbsp; 100/100 @ $453.90 &nbsp;|&nbsp; realized P&amp;L: +$310.00 &nbsp;|&nbsp; fee: $0.91' },
+  ];
+
+  const STREAM_LOGS = [
+    { level:'DEBUG', msg:'Received bar: SPY O={o} H={h} L={l} C={c} V={v}' },
+    { level:'DEBUG', msg:'MA(5)={ma5} &nbsp;|&nbsp; MA(20)={ma20} &nbsp;|&nbsp; delta={delta}' },
+    { level:'INFO',  msg:'Portfolio value: <b style="color:#3fb950">${equity}</b> &nbsp;|&nbsp; unrealized P&amp;L: <b style="color:#3fb950">+${pnl}</b>' },
+    { level:'INFO',  msg:'Order submitted: <b style="color:#3fb950">BUY</b> {qty} <b style="color:#e6edf3">{sym}</b> @ MARKET' },
+    { level:'DEBUG', msg:'Heartbeat &nbsp;|&nbsp; open orders: {orders} &nbsp;|&nbsp; positions: 4 &nbsp;|&nbsp; kafka lag: {lag}ms' },
+    { level:'WARN',  msg:'Slippage detected on {sym} &nbsp;|&nbsp; expected $451.20 &nbsp;|&nbsp; filled $451.44 &nbsp;|&nbsp; delta: +$0.24' },
+    { level:'INFO',  msg:'Risk check passed &nbsp;|&nbsp; drawdown: 0.12% &nbsp;|&nbsp; max: 5.00%' },
+  ];
+
+  let allLogEntries = [];
+  let logCount = 0;
+
+  function ts() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  }
+
+  function renderLog(time, level, msg) {
+    const c = LOG_COLORS[level] || LOG_COLORS.DEBUG;
+    return `<div data-level="${level}" style="display:flex;align-items:baseline;gap:10px;padding:3px 0;border-bottom:1px solid rgba(33,38,45,0.5);">
+      <span style="color:#6e7681;white-space:nowrap;flex-shrink:0;">${time}</span>
+      <span style="background:${c.bg};color:${c.text};border:1px solid ${c.border};padding:0 5px;border-radius:3px;font-size:9.5px;font-weight:700;flex-shrink:0;min-width:38px;text-align:center;letter-spacing:0.4px;">${level}</span>
+      <span style="color:#c9d1d9;word-break:break-word;">${msg}</span>
+    </div>`;
+  }
+
+  function appendLog(time, level, msg) {
+    const terminal = document.getElementById('logTerminal');
+    const filterVal = document.getElementById('logLevelFilter').value;
+    const el = document.createElement('div');
+    el.innerHTML = renderLog(time, level, msg);
+    const node = el.firstElementChild;
+    allLogEntries.push(node);
+    logCount++;
+    document.getElementById('logCount').textContent = logCount;
+    if (filterVal === 'ALL' || filterVal === level) {
+      terminal.appendChild(node);
+    }
+    if (document.getElementById('autoScroll').checked) {
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+  }
+
+  function filterLogs() {
+    const terminal = document.getElementById('logTerminal');
+    const filterVal = document.getElementById('logLevelFilter').value;
+    terminal.innerHTML = '';
+    allLogEntries.forEach(node => {
+      if (filterVal === 'ALL' || node.dataset.level === filterVal) {
+        terminal.appendChild(node);
+      }
+    });
+    if (document.getElementById('autoScroll').checked) terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  function clearLogs() {
+    allLogEntries = [];
+    logCount = 0;
+    document.getElementById('logTerminal').innerHTML = '';
+    document.getElementById('logCount').textContent = '0';
+  }
+
+  function rand(min, max) { return (Math.random() * (max - min) + min).toFixed(2); }
+  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  // Seed initial logs
+  SEED_LOGS.forEach(e => appendLog(e.time, e.level, e.msg));
+
+  // Stream new logs periodically
+  const SYMS = ['SPY','QQQ','AAPL','MSFT'];
+  setInterval(() => {
+    const template = STREAM_LOGS[randInt(0, STREAM_LOGS.length - 1)];
+    const o = rand(450, 455), h = (parseFloat(o) + parseFloat(rand(0.2, 1.2))).toFixed(2);
+    const l = (parseFloat(o) - parseFloat(rand(0.2, 0.8))).toFixed(2);
+    const c = rand(parseFloat(l), parseFloat(h));
+    const ma5 = (parseFloat(c) + parseFloat(rand(-0.5, 0.5))).toFixed(2);
+    const ma20 = (parseFloat(c) - parseFloat(rand(0.5, 2.0))).toFixed(2);
+    const delta = (parseFloat(ma5) - parseFloat(ma20)).toFixed(2);
+    const msg = template.msg
+      .replace('{o}', o).replace('{h}', h).replace('{l}', l).replace('{c}', c)
+      .replace('{v}', (randInt(800, 3200) * 1000).toLocaleString())
+      .replace('{ma5}', ma5).replace('{ma20}', ma20).replace('{delta}', (delta > 0 ? '+' : '') + delta)
+      .replace('{equity}', (102341 + randInt(-50, 150)).toLocaleString())
+      .replace('{pnl}', (1847 + randInt(-20, 80)).toLocaleString())
+      .replace('{qty}', randInt(10, 50))
+      .replace('{sym}', SYMS[randInt(0, SYMS.length - 1)])
+      .replace('{orders}', randInt(0, 3))
+      .replace('{lag}', randInt(1, 8));
+    appendLog(ts(), template.level, msg);
+  }, 2800);
+</script>
+
+</body>
+</html>

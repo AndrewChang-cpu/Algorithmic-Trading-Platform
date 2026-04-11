@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Backtest Results: SPY Buy-and-Hold</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #161b22;
+      border-right: 1px solid #21262d;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .sidebar-logo {
+      padding: 16px;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 12px;
+      color: #fff;
+      letter-spacing: -0.5px;
+      flex-shrink: 0;
+    }
+
+    .logo-text-primary {
+      font-size: 13px;
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: -0.2px;
+      line-height: 1.2;
+    }
+    .logo-text-secondary {
+      font-size: 10px;
+      color: #6e7681;
+      line-height: 1.2;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 10px 0;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      padding: 10px 16px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 16px;
+      color: #8b949e;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.12s ease;
+      border-left: 2px solid transparent;
+    }
+    .nav-item:hover { background: rgba(33, 38, 45, 0.8); color: #c9d1d9; }
+    .nav-item.active {
+      background: rgba(56, 139, 253, 0.08);
+      color: #388bfd;
+      border-left-color: #388bfd;
+    }
+
+    .nav-icon {
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: #21262d;
+      color: #8b949e;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .nav-item.active .nav-badge {
+      background: rgba(56, 139, 253, 0.15);
+      color: #388bfd;
+    }
+
+    .nav-live-dot {
+      margin-left: auto;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #3fb950;
+      animation: live-pulse 2s infinite;
+    }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(63, 185, 80, 0); }
+    }
+
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+
+    .sidebar-bottom {
+      padding: 12px 16px;
+      border-top: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .user-avatar {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #388bfd, #1f6feb);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #c9d1d9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* ── MAIN ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .topbar {
+      height: 46px;
+      padding: 0 20px;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0d1117;
+      flex-shrink: 0;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .bc-link { color: #388bfd; cursor: pointer; font-weight: 500; }
+    .bc-link:hover { text-decoration: underline; }
+    .bc-sep { color: #30363d; font-size: 14px; }
+    .bc-current { color: #8b949e; }
+    .bc-id {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 10px;
+      background: #21262d;
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #6e7681;
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.12s ease;
+      white-space: nowrap;
+    }
+    .btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    .btn-ghost {
+      background: transparent;
+      border-color: #30363d;
+      color: #8b949e;
+    }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; border-color: #484f58; }
+
+    .btn-primary {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #388bfd; border-color: #388bfd; }
+
+    .btn-danger {
+      background: transparent;
+      border-color: rgba(248, 81, 73, 0.3);
+      color: #f85149;
+    }
+    .btn-danger:hover { background: rgba(248, 81, 73, 0.08); }
+
+    .btn-divider { width: 1px; height: 20px; background: #21262d; margin: 0 2px; }
+
+    /* ── SCROLLABLE CONTENT ── */
+    .content-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px 32px;
+    }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    /* ── JOB HEADER ── */
+    .job-header {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .jh-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .jh-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: -0.3px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .status-completed {
+      background: rgba(63, 185, 80, 0.1);
+      color: #3fb950;
+      border: 1px solid rgba(63, 185, 80, 0.25);
+    }
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .jh-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .jh-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #6e7681;
+    }
+    .jh-meta-item svg { width: 11px; height: 11px; color: #484f58; flex-shrink: 0; }
+    .jh-meta-val { color: #8b949e; font-weight: 500; }
+
+    .jh-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+    .jh-job-id {
+      font-family: 'SF Mono', monospace;
+      font-size: 10px;
+      color: #6e7681;
+      background: #21262d;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .jh-tags { display: flex; gap: 6px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.2px;
+    }
+    .tag-blue {
+      background: rgba(56, 139, 253, 0.1);
+      border: 1px solid rgba(56, 139, 253, 0.2);
+      color: #388bfd;
+    }
+    .tag-gray {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #8b949e;
+    }
+
+    /* ── HERO METRICS ── */
+    .hero-metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .metric-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 13px 15px;
+      transition: border-color 0.15s;
+      cursor: default;
+    }
+    .metric-card:hover { border-color: #30363d; }
+    .metric-card.hl-green { border-color: rgba(63, 185, 80, 0.2); }
+    .metric-card.hl-red { border-color: rgba(248, 81, 73, 0.15); }
+
+    .mc-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mc-value {
+      font-size: 23px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.8px;
+    }
+
+    .mc-sub {
+      font-size: 10px;
+      color: #6e7681;
+      margin-top: 5px;
+    }
+    .mc-sub.pos { color: #3fb950; }
+    .mc-sub.neg { color: #f85149; }
+
+    .text-green { color: #3fb950; }
+    .text-red { color: #f85149; }
+    .text-blue { color: #388bfd; }
+    .text-white { color: #e6edf3; }
+    .text-muted { color: #6e7681; }
+
+    /* tooltip icon */
+    .tip-icon { width: 12px; height: 12px; color: #484f58; cursor: help; }
+
+    /* ── CHART SECTION ── */
+    .chart-section {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+    }
+
+    .chart-topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .chart-title-group { }
+    .chart-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .chart-price-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .chart-price {
+      font-size: 22px;
+      font-weight: 700;
+      color: #3fb950;
+      letter-spacing: -0.6px;
+    }
+    .chart-change {
+      font-size: 12px;
+      font-weight: 600;
+      color: #3fb950;
+    }
+    .chart-change-period { font-size: 11px; color: #6e7681; font-weight: 400; }
+
+    .chart-controls { display: flex; align-items: center; gap: 4px; }
+    .period-btn {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      color: #6e7681;
+      border: none;
+      background: transparent;
+      transition: all 0.12s;
+    }
+    .period-btn:hover { color: #c9d1d9; background: #21262d; }
+    .period-btn.active { color: #e6edf3; background: #21262d; }
+    .period-sep { width: 1px; height: 14px; background: #21262d; margin: 0 3px; }
+
+    .chart-container { position: relative; }
+
+    .chart-legend {
+      display: flex;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: #6e7681;
+    }
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+    .legend-line {
+      width: 14px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    /* ── TABS ── */
+    .tabs-section {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .tabs-nav {
+      display: flex;
+      background: #0d1117;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .tab-btn {
+      padding: 10px 18px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #6e7681;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.12s;
+    }
+    .tab-btn:hover { color: #c9d1d9; }
+    .tab-btn.active { color: #388bfd; border-bottom-color: #388bfd; }
+
+    .tab-pane { display: none; padding: 16px 18px; }
+    .tab-pane.active { display: block; }
+
+    .metrics-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid #21262d;
+      margin-bottom: 8px;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+    }
+    .metric-row + .metric-row { border-top: 1px solid rgba(33, 38, 45, 0.6); }
+
+    .mr-label { font-size: 12px; color: #8b949e; }
+    .mr-value { font-size: 12px; font-weight: 600; color: #c9d1d9; }
+    .mr-value.neg { color: #f85149; }
+    .mr-value.pos { color: #3fb950; }
+    .mr-value.dim { color: #6e7681; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 36px;
+      text-align: center;
+    }
+    .empty-icon { width: 36px; height: 36px; color: #30363d; margin-bottom: 10px; }
+    .empty-text { font-size: 13px; color: #8b949e; margin-bottom: 4px; }
+    .empty-sub { font-size: 11px; color: #6e7681; }
+
+    /* ── RUNTIME BAR ── */
+    .runtime-bar {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 10px;
+      padding: 11px 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+    }
+
+    .runtime-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      padding-right: 18px;
+      border-right: 1px solid #21262d;
+      margin-right: 18px;
+      white-space: nowrap;
+    }
+
+    .runtime-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+
+    .rs-label { font-size: 10px; color: #6e7681; margin-bottom: 2px; }
+    .rs-value { font-size: 13px; font-weight: 700; color: #c9d1d9; }
+    .rs-value.pos { color: #3fb950; }
+    .rs-value.neg { color: #f85149; }
+
+    /* ── ACTION BAR ── */
+    .action-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ SIDEBAR -->
+<aside class="sidebar">
+
+  <div class="sidebar-logo">
+    <div class="logo-mark">ATP</div>
+    <div>
+      <div class="logo-text-primary">AlgoTrader</div>
+      <div class="logo-text-secondary">Pro Platform</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Platform</div>
+
+    <!-- Overview -->
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1" y="1" width="5.5" height="5.5" rx="1"/>
+        <rect x="9.5" y="1" width="5.5" height="5.5" rx="1"/>
+        <rect x="1" y="9.5" width="5.5" height="5.5" rx="1"/>
+        <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1"/>
+      </svg>
+      Overview
+    </a>
+
+    <!-- Strategies -->
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="5,3.5 1.5,8 5,12.5"/>
+        <polyline points="11,3.5 14.5,8 11,12.5"/>
+        <line x1="9" y1="4.5" x2="7" y2="11.5"/>
+      </svg>
+      Strategies
+      <span class="nav-badge">3</span>
+    </a>
+
+    <!-- Backtests — ACTIVE -->
+    <a class="nav-item active" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <rect x="1" y="10" width="3" height="5" rx="0.5" opacity="0.7"/>
+        <rect x="6" y="6.5" width="3" height="8.5" rx="0.5" opacity="0.85"/>
+        <rect x="11" y="2" width="3" height="13" rx="0.5"/>
+      </svg>
+      Backtests
+      <span class="nav-badge">12</span>
+    </a>
+
+    <!-- Live Trading -->
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+        <polyline points="0.5,8 3,8 5,3.5 8,12.5 10.5,6 12.5,8 15.5,8"/>
+      </svg>
+      Live Trading
+      <span class="nav-live-dot"></span>
+    </a>
+
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Account</div>
+
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="2.5"/>
+        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6l-1.4 1.4M5 11l-1.4 1.4"/>
+      </svg>
+      Settings
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="user-avatar">AJ</div>
+    <div class="user-info">
+      <div class="user-name">Andrew Johnson</div>
+      <div class="user-plan">Pro Plan</div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ══════════════════════════════════════════════════════════ MAIN -->
+<main class="main">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="breadcrumb">
+      <a class="bc-link" href="#">Backtests</a>
+      <span class="bc-sep">/</span>
+      <span class="bc-current">SPY Buy-and-Hold</span>
+      <span class="bc-id">#1535553589</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M6 1v6M3 4l3-3 3 3M1 9v1a1 1 0 001 1h8a1 1 0 001-1V9"/>
+        </svg>
+        Export CSV
+      </button>
+      <button class="btn btn-ghost" onclick="switchTabByName('logs')">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="10" height="10" rx="1.5"/>
+          <path d="M4 6h4M4 4h2"/>
+        </svg>
+        View Logs
+      </button>
+      <div class="btn-divider"></div>
+      <button class="btn btn-primary">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 6a5 5 0 0110 0"/>
+          <path d="M8 4l3 2-3 2"/>
+        </svg>
+        Clone Strategy
+      </button>
+    </div>
+  </div>
+
+  <!-- Scrollable content -->
+  <div class="content-scroll">
+
+    <!-- ── JOB HEADER ── -->
+    <div class="job-header">
+      <div>
+        <div class="jh-title-row">
+          <span class="jh-title">SPY Buy-and-Hold</span>
+          <span class="status-badge status-completed">
+            <span class="status-dot"></span>
+            Completed
+          </span>
+        </div>
+        <div class="jh-meta">
+          <div class="jh-meta-item">
+            <!-- calendar icon -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="2" width="10" height="9" rx="1.2"/>
+              <path d="M1 5h10M4 1v2M8 1v2"/>
+            </svg>
+            <span>Backtest period:</span>
+            <span class="jh-meta-val">Oct 7, 2013 &rarr; Oct 11, 2013</span>
+          </div>
+          <div class="jh-meta-item">
+            <!-- clock icon -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="6" cy="6" r="5"/>
+              <path d="M6 3.5v2.5l2 1.5"/>
+            </svg>
+            <span>Execution time:</span>
+            <span class="jh-meta-val">16 seconds</span>
+          </div>
+          <div class="jh-meta-item">
+            <!-- orders icon -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M1 3h10M1 6h7M1 9h5"/>
+            </svg>
+            <span>Orders:</span>
+            <span class="jh-meta-val">1</span>
+          </div>
+          <div class="jh-meta-item">
+            <!-- log icon -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="1" width="8" height="10" rx="1"/>
+              <path d="M4 4h4M4 6.5h4M4 9h2"/>
+            </svg>
+            <span>Log entries:</span>
+            <span class="jh-meta-val">4</span>
+          </div>
+          <div class="jh-meta-item">
+            <!-- host icon -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="2" width="10" height="4" rx="1"/>
+              <rect x="1" y="8" width="10" height="3" rx="1"/>
+              <circle cx="9.5" cy="4" r="0.7" fill="currentColor"/>
+              <circle cx="9.5" cy="9.5" r="0.7" fill="currentColor"/>
+            </svg>
+            <span>Run on:</span>
+            <span class="jh-meta-val">Feb 14, 2026 &middot; 03:59 UTC</span>
+          </div>
+        </div>
+      </div>
+      <div class="jh-right">
+        <div class="jh-job-id">job/1535553589</div>
+        <div class="jh-tags">
+          <span class="tag tag-blue">SPY</span>
+          <span class="tag tag-gray">Minute</span>
+          <span class="tag tag-gray">USD</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HERO METRICS ── -->
+    <div class="hero-metrics">
+
+      <!-- Net Profit -->
+      <div class="metric-card hl-green">
+        <div class="mc-label">
+          Net Profit
+          <svg class="tip-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" title="Total return over backtest period">
+            <circle cx="6" cy="6" r="5"/>
+            <path d="M6 5.5v3M6 4h.01"/>
+          </svg>
+        </div>
+        <div class="mc-value text-green">+1.69%</div>
+        <div class="mc-sub pos">+$1,691.92 absolute</div>
+      </div>
+
+      <!-- Sharpe Ratio -->
+      <div class="metric-card">
+        <div class="mc-label">
+          Sharpe Ratio
+          <svg class="tip-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" title="Risk-adjusted return (higher is better)">
+            <circle cx="6" cy="6" r="5"/>
+            <path d="M6 5.5v3M6 4h.01"/>
+          </svg>
+        </div>
+        <div class="mc-value text-white">8.854</div>
+        <div class="mc-sub">Prob. Sharpe: 67.61%</div>
+      </div>
+
+      <!-- Max Drawdown -->
+      <div class="metric-card">
+        <div class="mc-label">
+          Max Drawdown
+          <svg class="tip-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="6" cy="6" r="5"/>
+            <path d="M6 5.5v3M6 4h.01"/>
+          </svg>
+        </div>
+        <div class="mc-value text-red">-2.20%</div>
+        <div class="mc-sub">Recovery: 3 days</div>
+      </div>
+
+      <!-- Win Rate -->
+      <div class="metric-card">
+        <div class="mc-label">Win Rate</div>
+        <div class="mc-value text-muted">N/A</div>
+        <div class="mc-sub">No closed trades</div>
+      </div>
+
+      <!-- Total Fees -->
+      <div class="metric-card hl-red">
+        <div class="mc-label">Total Fees</div>
+        <div class="mc-value text-red">$3.44</div>
+        <div class="mc-sub neg">Charged on 1 order</div>
+      </div>
+
+    </div>
+
+    <!-- ── EQUITY CURVE CHART ── -->
+    <div class="chart-section">
+      <div class="chart-topbar">
+        <div class="chart-title-group">
+          <div class="chart-title">Strategy Equity &mdash; Candlestick</div>
+          <div class="chart-price-row">
+            <span class="chart-price">$101,691.92</span>
+            <span class="chart-change">+$1,691.92</span>
+            <span class="chart-change" style="margin-left:-4px;">(+1.69%)</span>
+            <span class="chart-change-period">over backtest</span>
+          </div>
+        </div>
+        <div class="chart-controls">
+          <button class="period-btn active">1D</button>
+          <button class="period-btn">1W</button>
+          <button class="period-btn">1M</button>
+          <button class="period-btn">All</button>
+          <div class="period-sep"></div>
+          <!-- candlestick icon -->
+          <button class="period-btn active" title="Candlestick">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4">
+              <rect x="2" y="4" width="3" height="5" rx="0.5" fill="currentColor" opacity="0.8"/>
+              <line x1="3.5" y1="1.5" x2="3.5" y2="4"/>
+              <line x1="3.5" y1="9" x2="3.5" y2="12"/>
+              <rect x="9" y="5" width="3" height="4" rx="0.5" fill="none"/>
+              <line x1="10.5" y1="2.5" x2="10.5" y2="5"/>
+              <line x1="10.5" y1="9" x2="10.5" y2="11.5"/>
+            </svg>
+          </button>
+          <!-- line chart icon -->
+          <button class="period-btn" title="Line">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4">
+              <polyline points="1,11 4,7 7,8.5 10,4 13,5"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- SVG Candlestick Chart -->
+      <div class="chart-container">
+        <svg viewBox="0 0 800 340" width="100%" height="340" style="display:block;">
+
+          <!-- ── Grid lines & Y-axis ── -->
+          <defs>
+            <pattern id="grid" width="160" height="255" patternUnits="userSpaceOnUse" x="65" y="15">
+              <line x1="160" y1="0" x2="160" y2="255" stroke="#21262d" stroke-width="0.5"/>
+            </pattern>
+          </defs>
+
+          <!-- Background -->
+          <rect x="65" y="15" width="720" height="255" fill="#0d1117" rx="4"/>
+
+          <!-- Horizontal grid lines -->
+          <!-- $98,000: y=229 -->
+          <line x1="65" y1="229" x2="785" y2="229" stroke="#21262d" stroke-width="0.5"/>
+          <!-- $99,000: y=178 -->
+          <line x1="65" y1="178" x2="785" y2="178" stroke="#21262d" stroke-width="0.5"/>
+          <!-- $100,000: y=127 (initial equity - highlighted) -->
+          <line x1="65" y1="127" x2="785" y2="127" stroke="#388bfd" stroke-width="0.6" stroke-dasharray="4 4" opacity="0.5"/>
+          <!-- $101,000: y=76 -->
+          <line x1="65" y1="76" x2="785" y2="76" stroke="#21262d" stroke-width="0.5"/>
+          <!-- $102,000: y=25 -->
+          <line x1="65" y1="25" x2="785" y2="25" stroke="#21262d" stroke-width="0.5"/>
+
+          <!-- Y-axis labels -->
+          <text x="58" y="232" text-anchor="end" font-size="10" fill="#6e7681" font-family="monospace">$98k</text>
+          <text x="58" y="181" text-anchor="end" font-size="10" fill="#6e7681" font-family="monospace">$99k</text>
+          <text x="58" y="130" text-anchor="end" font-size="10" fill="#388bfd" font-family="monospace" opacity="0.8">$100k</text>
+          <text x="58" y="79"  text-anchor="end" font-size="10" fill="#6e7681" font-family="monospace">$101k</text>
+          <text x="58" y="28"  text-anchor="end" font-size="10" fill="#6e7681" font-family="monospace">$102k</text>
+
+          <!-- Initial equity label -->
+          <text x="68" y="123" font-size="9" fill="#388bfd" opacity="0.6" font-family="monospace">Initial Equity</text>
+
+          <!-- ── Vertical grid lines (date separators) ── -->
+          <!-- Oct 7: x=137 -->
+          <line x1="137" y1="15" x2="137" y2="270" stroke="#21262d" stroke-width="0.5"/>
+          <!-- Oct 8: x=281 -->
+          <line x1="281" y1="15" x2="281" y2="270" stroke="#21262d" stroke-width="0.5"/>
+          <!-- Oct 9: x=425 -->
+          <line x1="425" y1="15" x2="425" y2="270" stroke="#21262d" stroke-width="0.5"/>
+          <!-- Oct 10: x=569 -->
+          <line x1="569" y1="15" x2="569" y2="270" stroke="#21262d" stroke-width="0.5"/>
+          <!-- Oct 11: x=713 -->
+          <line x1="713" y1="15" x2="713" y2="270" stroke="#21262d" stroke-width="0.5"/>
+
+          <!-- ════════════════════════════════════
+               CANDLESTICK 1 — Oct 7, 2013 (GREEN)
+               O=100000 H=100200 L=99720 C=100115
+               y_O=127  y_H=117  y_L=142 y_C=121
+          ════════════════════════════════════ -->
+          <!-- Upper wick: y_H=117 to y_C=121 -->
+          <line x1="137" y1="117" x2="137" y2="121" stroke="#3fb950" stroke-width="1.5"/>
+          <!-- Body: top=y_C=121, height=y_O-y_C=6 -->
+          <rect x="112" y="121" width="50" height="6" fill="#3fb950" rx="1"/>
+          <!-- Lower wick: y_O=127 to y_L=142 -->
+          <line x1="137" y1="127" x2="137" y2="142" stroke="#3fb950" stroke-width="1.5"/>
+
+          <!-- BUY ORDER marker -->
+          <!-- Triangle below candle 1 low (y_L=142), pointing up -->
+          <polygon points="137,155 130,166 144,166" fill="#3fb950" opacity="0.9"/>
+          <text x="148" y="164" font-size="9" fill="#3fb950" font-weight="600">BUY 1 SPY</text>
+
+          <!-- ════════════════════════════════════
+               CANDLESTICK 2 — Oct 8, 2013 (GREEN)
+               O=100115 H=100720 L=100020 C=100470
+               y_O=121  y_H=91   y_L=126  y_C=103
+          ════════════════════════════════════ -->
+          <line x1="281" y1="91" x2="281" y2="103" stroke="#3fb950" stroke-width="1.5"/>
+          <rect x="256" y="103" width="50" height="18" fill="#3fb950" rx="1"/>
+          <line x1="281" y1="121" x2="281" y2="126" stroke="#3fb950" stroke-width="1.5"/>
+
+          <!-- ════════════════════════════════════
+               CANDLESTICK 3 — Oct 9, 2013 (GREEN)
+               O=100470 H=100950 L=100320 C=100810
+               y_O=103  y_H=79   y_L=111  y_C=86
+          ════════════════════════════════════ -->
+          <line x1="425" y1="79" x2="425" y2="86" stroke="#3fb950" stroke-width="1.5"/>
+          <rect x="400" y="86" width="50" height="17" fill="#3fb950" rx="1"/>
+          <line x1="425" y1="103" x2="425" y2="111" stroke="#3fb950" stroke-width="1.5"/>
+
+          <!-- ════════════════════════════════════
+               CANDLESTICK 4 — Oct 10, 2013 (RED) ← LEAN actual data
+               O=99990  H=100543 L=98283  C=98878
+               y_O=128  y_H=100  y_L=215  y_C=184
+          ════════════════════════════════════ -->
+          <!-- Upper wick: y_H=100 to y_O=128 -->
+          <line x1="569" y1="100" x2="569" y2="128" stroke="#f85149" stroke-width="1.5"/>
+          <!-- Body: top=y_O=128, bottom=y_C=184, height=56 -->
+          <rect x="544" y="128" width="50" height="56" fill="#f85149" rx="1"/>
+          <!-- Lower wick: y_C=184 to y_L=215 -->
+          <line x1="569" y1="184" x2="569" y2="215" stroke="#f85149" stroke-width="1.5"/>
+
+          <!-- Crosshair vertical line (simulating hover on candle 4) -->
+          <line x1="569" y1="15" x2="569" y2="270" stroke="#6e7681" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.6"/>
+          <!-- Crosshair horizontal line at close $98,878 (y=184) -->
+          <line x1="65" y1="184" x2="785" y2="184" stroke="#6e7681" stroke-width="0.8" stroke-dasharray="2 3" opacity="0.4"/>
+          <!-- Price label on y-axis for crosshair -->
+          <rect x="2" y="178" width="59" height="14" fill="#f85149" rx="2"/>
+          <text x="31.5" y="188" text-anchor="middle" font-size="9" fill="#fff" font-family="monospace" font-weight="600">$98,878</text>
+
+          <!-- ════════════════════════════════════
+               CANDLESTICK 5 — Oct 11, 2013 (GREEN, big recovery)
+               O=98878  H=101750 L=98650  C=101692
+               y_O=184  y_H=38   y_L=196  y_C=41
+          ════════════════════════════════════ -->
+          <!-- Upper wick: y_H=38 to y_C=41 (very short) -->
+          <line x1="713" y1="38" x2="713" y2="41" stroke="#3fb950" stroke-width="1.5"/>
+          <!-- Body: top=y_C=41, bottom=y_O=184, height=143 -->
+          <rect x="688" y="41" width="50" height="143" fill="#3fb950" rx="1" opacity="0.9"/>
+          <!-- Lower wick: y_O=184 to y_L=196 -->
+          <line x1="713" y1="184" x2="713" y2="196" stroke="#3fb950" stroke-width="1.5"/>
+
+          <!-- Final equity price label on chart -->
+          <rect x="743" y="35" width="55" height="14" fill="rgba(63,185,80,0.15)" rx="2" stroke="#3fb950" stroke-width="0.5"/>
+          <text x="770.5" y="45" text-anchor="middle" font-size="9" fill="#3fb950" font-family="monospace" font-weight="600">$101,692</text>
+
+          <!-- ── X-axis labels ── -->
+          <text x="137" y="286" text-anchor="middle" font-size="10" fill="#6e7681" font-family="sans-serif">Oct 7</text>
+          <text x="281" y="286" text-anchor="middle" font-size="10" fill="#6e7681" font-family="sans-serif">Oct 8</text>
+          <text x="425" y="286" text-anchor="middle" font-size="10" fill="#6e7681" font-family="sans-serif">Oct 9</text>
+          <text x="569" y="286" text-anchor="middle" font-size="10" fill="#f85149" font-family="sans-serif" font-weight="600">Oct 10</text>
+          <text x="713" y="286" text-anchor="middle" font-size="10" fill="#6e7681" font-family="sans-serif">Oct 11</text>
+
+          <!-- ── Volume bars ── -->
+          <!-- Divider line -->
+          <line x1="65" y1="293" x2="785" y2="293" stroke="#21262d" stroke-width="0.5"/>
+          <text x="58" y="328" text-anchor="end" font-size="9" fill="#6e7681" font-family="monospace">Vol</text>
+
+          <!-- Vol 1: green, h=9, x=137 -->
+          <rect x="112" y="321" width="50" height="9" fill="#3fb950" rx="1" opacity="0.4"/>
+          <!-- Vol 2: green, h=13, x=281 -->
+          <rect x="256" y="317" width="50" height="13" fill="#3fb950" rx="1" opacity="0.4"/>
+          <!-- Vol 3: green, h=15, x=425 -->
+          <rect x="400" y="315" width="50" height="15" fill="#3fb950" rx="1" opacity="0.4"/>
+          <!-- Vol 4: red, h=25, x=569 -->
+          <rect x="544" y="305" width="50" height="25" fill="#f85149" rx="1" opacity="0.5"/>
+          <!-- Vol 5: green, h=35, x=713 -->
+          <rect x="688" y="295" width="50" height="35" fill="#3fb950" rx="1" opacity="0.4"/>
+
+          <!-- ── Hover tooltip (Oct 10 candle) ── -->
+          <rect x="400" y="20" width="155" height="100" fill="#1c2128" stroke="#30363d" stroke-width="1" rx="6"/>
+          <text x="413" y="37" font-size="10" fill="#8b949e" font-family="sans-serif" font-weight="600">Oct 10, 2013</text>
+          <line x1="408" y1="41" x2="547" y2="41" stroke="#21262d" stroke-width="0.5"/>
+
+          <text x="413" y="55" font-size="10" fill="#6e7681" font-family="monospace">Open</text>
+          <text x="547" y="55" text-anchor="end" font-size="10" fill="#c9d1d9" font-family="monospace" font-weight="600">$99,990.00</text>
+
+          <text x="413" y="68" font-size="10" fill="#6e7681" font-family="monospace">High</text>
+          <text x="547" y="68" text-anchor="end" font-size="10" fill="#3fb950" font-family="monospace" font-weight="600">$100,543.00</text>
+
+          <text x="413" y="81" font-size="10" fill="#6e7681" font-family="monospace">Low</text>
+          <text x="547" y="81" text-anchor="end" font-size="10" fill="#f85149" font-family="monospace" font-weight="600">$98,283.00</text>
+
+          <text x="413" y="94" font-size="10" fill="#6e7681" font-family="monospace">Close</text>
+          <text x="547" y="94" text-anchor="end" font-size="10" fill="#f85149" font-family="monospace" font-weight="600">$98,878.22</text>
+
+          <text x="413" y="107" font-size="10" fill="#6e7681" font-family="monospace">Change</text>
+          <text x="547" y="107" text-anchor="end" font-size="10" fill="#f85149" font-family="monospace" font-weight="600">-1.11%</text>
+
+          <!-- Dot on x-axis for active candle -->
+          <rect x="558" y="289" width="22" height="7" fill="#f85149" rx="2" opacity="0.6"/>
+
+        </svg>
+
+        <!-- Chart legend -->
+        <div class="chart-legend" style="padding: 0 4px;">
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#3fb950;"></div>
+            <span>Up candle</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#f85149;"></div>
+            <span>Down candle</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line" style="background:#388bfd; border-top:2px dashed #388bfd; width:14px; height:0; margin-top:5px;"></div>
+            <span style="margin-top:1px;">Initial equity ($100,000)</span>
+          </div>
+          <div class="legend-item" style="margin-left:auto;">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="#3fb950"><polygon points="5,0 0,10 10,10"/></svg>
+            <span>Buy order</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#3fb950; opacity:0.4;"></div>
+            <span>Volume</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TABS ── -->
+    <div class="tabs-section">
+      <div class="tabs-nav">
+        <button class="tab-btn active" onclick="switchTab('risk')">Risk Metrics</button>
+        <button class="tab-btn" onclick="switchTab('trades')">Trade Statistics</button>
+        <button class="tab-btn" onclick="switchTab('portfolio')">Portfolio Details</button>
+        <button class="tab-btn" onclick="switchTab('logs')">Logs <span style="display:inline-flex;align-items:center;justify-content:center;background:#21262d;color:#8b949e;font-size:9px;font-weight:600;padding:0 5px;border-radius:8px;margin-left:4px;min-width:16px;">4</span></button>
+      </div>
+
+      <!-- Tab: Risk Metrics -->
+      <div id="tab-risk" class="tab-pane active">
+        <div class="metrics-grid-3">
+
+          <!-- Risk-Adjusted Returns -->
+          <div>
+            <div class="section-title">Risk-Adjusted Returns</div>
+            <div class="metric-row">
+              <span class="mr-label">Sharpe Ratio</span>
+              <span class="mr-value">8.854</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Sortino Ratio</span>
+              <span class="mr-value dim">0.000</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Prob. Sharpe Ratio</span>
+              <span class="mr-value">67.61%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Information Ratio</span>
+              <span class="mr-value neg">-14.565</span>
+            </div>
+          </div>
+
+          <!-- Market Sensitivity -->
+          <div>
+            <div class="section-title">Market Sensitivity</div>
+            <div class="metric-row">
+              <span class="mr-label">Beta</span>
+              <span class="mr-value">0.996</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Alpha</span>
+              <span class="mr-value neg">-0.005</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Tracking Error</span>
+              <span class="mr-value">0.001</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Treynor Ratio</span>
+              <span class="mr-value">1.970</span>
+            </div>
+          </div>
+
+          <!-- Volatility & VaR -->
+          <div>
+            <div class="section-title">Volatility &amp; Value at Risk</div>
+            <div class="metric-row">
+              <span class="mr-label">Annual Std Dev</span>
+              <span class="mr-value">22.17%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Annual Variance</span>
+              <span class="mr-value">4.91%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">VaR (99%)</span>
+              <span class="mr-value neg">-2.80%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">VaR (95%)</span>
+              <span class="mr-value neg">-1.90%</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tab: Trade Statistics -->
+      <div id="tab-trades" class="tab-pane">
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="5" y="8" width="30" height="24" rx="3"/>
+            <path d="M13 20h14M13 26h8"/>
+            <circle cx="30" cy="12" r="5" fill="#0d1117"/>
+            <path d="M30 10v2.5l1.5 1.5" stroke-linecap="round"/>
+          </svg>
+          <div class="empty-text">No closed trades in this backtest</div>
+          <div class="empty-sub">
+            The strategy held 1 open position (SPY) through the entire backtest period.<br>
+            Trade statistics will appear here when positions are closed.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Portfolio Details -->
+      <div id="tab-portfolio" class="tab-pane">
+        <div class="metrics-grid-3">
+
+          <!-- Returns -->
+          <div>
+            <div class="section-title">Returns</div>
+            <div class="metric-row">
+              <span class="mr-label">Compounding Annual Return</span>
+              <span class="mr-value pos">271.45%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Total Net Profit</span>
+              <span class="mr-value pos">+1.69%</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Expectancy</span>
+              <span class="mr-value dim">0.00</span>
+            </div>
+          </div>
+
+          <!-- Equity -->
+          <div>
+            <div class="section-title">Equity</div>
+            <div class="metric-row">
+              <span class="mr-label">Start Equity</span>
+              <span class="mr-value">$100,000.00</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">End Equity</span>
+              <span class="mr-value pos">$101,691.92</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Portfolio Turnover</span>
+              <span class="mr-value">19.93%</span>
+            </div>
+          </div>
+
+          <!-- Configuration -->
+          <div>
+            <div class="section-title">Configuration</div>
+            <div class="metric-row">
+              <span class="mr-label">Start Date</span>
+              <span class="mr-value">Oct 7, 2013</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">End Date</span>
+              <span class="mr-value">Oct 11, 2013</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Trading Days / Year</span>
+              <span class="mr-value">252</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Account Currency</span>
+              <span class="mr-value">USD</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Est. Strategy Capacity</span>
+              <span class="mr-value">$56,000,000</span>
+            </div>
+            <div class="metric-row">
+              <span class="mr-label">Lowest Capacity Asset</span>
+              <span class="mr-value tag tag-blue" style="display:inline-block; padding:1px 6px;">SPY</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Tab: Logs -->
+      <div id="tab-logs" class="tab-pane">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:600;color:#6e7681;text-transform:uppercase;letter-spacing:0.6px;">Job Logs</span>
+            <span style="font-size:10px;background:#21262d;color:#8b949e;padding:1px 7px;border-radius:8px;">4 entries</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <select style="background:#161b22;border:1px solid #21262d;border-radius:5px;padding:3px 8px;color:#8b949e;font-size:11px;outline:none;font-family:inherit;">
+              <option>All Levels</option>
+              <option>INFO</option>
+              <option>WARN</option>
+              <option>ERROR</option>
+            </select>
+            <button style="background:transparent;border:1px solid #21262d;border-radius:5px;padding:3px 9px;color:#6e7681;font-size:11px;cursor:pointer;font-family:inherit;">Copy All</button>
+          </div>
+        </div>
+        <div style="background:#010409;border:1px solid #21262d;border-radius:8px;overflow:hidden;font-family:'SF Mono','Consolas','Fira Code',monospace;font-size:11.5px;line-height:1.7;">
+          <!-- Log entry 1 -->
+          <div style="display:flex;align-items:baseline;gap:12px;padding:7px 14px;border-bottom:1px solid #0d1117;">
+            <span style="color:#6e7681;white-space:nowrap;flex-shrink:0;">2013-10-07 09:30:00</span>
+            <span style="background:rgba(56,139,253,0.12);color:#388bfd;border:1px solid rgba(56,139,253,0.2);padding:0 6px;border-radius:3px;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:0.3px;">INFO</span>
+            <span style="color:#c9d1d9;">Algorithm initialized. Strategy: <span style="color:#e6edf3;font-weight:600;">SPY Buy-and-Hold</span> &nbsp;|&nbsp; Start: 2013-10-07 &nbsp;|&nbsp; End: 2013-10-11 &nbsp;|&nbsp; Cash: $100,000.00</span>
+          </div>
+          <!-- Log entry 2 -->
+          <div style="display:flex;align-items:baseline;gap:12px;padding:7px 14px;border-bottom:1px solid #0d1117;">
+            <span style="color:#6e7681;white-space:nowrap;flex-shrink:0;">2013-10-07 09:30:01</span>
+            <span style="background:rgba(56,139,253,0.12);color:#388bfd;border:1px solid rgba(56,139,253,0.2);padding:0 6px;border-radius:3px;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:0.3px;">INFO</span>
+            <span style="color:#c9d1d9;">Universe selection complete. Security: <span style="color:#e6edf3;font-weight:600;">SPY</span> &nbsp;|&nbsp; Resolution: Minute &nbsp;|&nbsp; DataFeed: KafkaDataFeed</span>
+          </div>
+          <!-- Log entry 3 -->
+          <div style="display:flex;align-items:baseline;gap:12px;padding:7px 14px;border-bottom:1px solid #0d1117;">
+            <span style="color:#6e7681;white-space:nowrap;flex-shrink:0;">2013-10-07 09:31:00</span>
+            <span style="background:rgba(56,139,253,0.12);color:#388bfd;border:1px solid rgba(56,139,253,0.2);padding:0 6px;border-radius:3px;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:0.3px;">INFO</span>
+            <span style="color:#c9d1d9;">Order placed: <span style="color:#3fb950;font-weight:600;">BUY</span> 224 <span style="color:#e6edf3;font-weight:600;">SPY</span> @ MARKET &nbsp;|&nbsp; Filled $444.69 &nbsp;|&nbsp; Total: $99,609.83 &nbsp;|&nbsp; Fee: $3.44 &nbsp;|&nbsp; ID: ord_1535553589_1</span>
+          </div>
+          <!-- Log entry 4 -->
+          <div style="display:flex;align-items:baseline;gap:12px;padding:7px 14px;">
+            <span style="color:#6e7681;white-space:nowrap;flex-shrink:0;">2013-10-11 16:00:00</span>
+            <span style="background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.2);padding:0 6px;border-radius:3px;font-size:10px;font-weight:700;flex-shrink:0;letter-spacing:0.3px;">INFO</span>
+            <span style="color:#c9d1d9;">Algorithm completed. Portfolio equity: <span style="color:#3fb950;font-weight:600;">$101,691.92</span> &nbsp;|&nbsp; Net profit: <span style="color:#3fb950;font-weight:600;">+1.69%</span> &nbsp;|&nbsp; Sharpe: 8.854 &nbsp;|&nbsp; Duration: 16s</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── RUNTIME STATISTICS ── -->
+    <div class="runtime-bar">
+      <div class="runtime-label">Runtime Stats</div>
+      <div class="runtime-stats">
+        <div>
+          <div class="rs-label">Portfolio Equity</div>
+          <div class="rs-value">$101,691.92</div>
+        </div>
+        <div>
+          <div class="rs-label">Unrealized P&amp;L</div>
+          <div class="rs-value pos">+$1,656.23</div>
+        </div>
+        <div>
+          <div class="rs-label">Holdings Value</div>
+          <div class="rs-value">$101,305.19</div>
+        </div>
+        <div>
+          <div class="rs-label">Total Fees</div>
+          <div class="rs-value neg">-$3.44</div>
+        </div>
+        <div>
+          <div class="rs-label">Return</div>
+          <div class="rs-value pos">+1.69%</div>
+        </div>
+        <div>
+          <div class="rs-label">Volume Traded</div>
+          <div class="rs-value">$99,609.83</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ACTION BAR ── -->
+    <div class="action-bar">
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 10h8M6 1v6M3.5 4.5L6 7l2.5-2.5"/>
+        </svg>
+        Download JSON
+      </button>
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 10h8M6 1v6M3.5 4.5L6 7l2.5-2.5"/>
+        </svg>
+        Export CSV
+      </button>
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="10" height="10" rx="1.5"/>
+          <path d="M3.5 4.5h5M3.5 6.5h4M3.5 8.5h2.5"/>
+        </svg>
+        View Logs
+      </button>
+      <div class="btn-divider"></div>
+      <button class="btn btn-primary">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 6a5 5 0 0110 0"/>
+          <path d="M8 4l3 2-3 2"/>
+        </svg>
+        Clone Strategy
+      </button>
+      <button class="btn btn-danger" style="margin-left:auto;">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 3h8M5 3V2h2v1M4.5 9.5V5M7.5 9.5V5M3 3l.5 7.5h5L9 3"/>
+        </svg>
+        Delete Backtest
+      </button>
+    </div>
+
+  </div><!-- /content-scroll -->
+</main>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-pane').forEach(function(p) {
+      p.classList.remove('active');
+    });
+    var pane = document.getElementById('tab-' + name);
+    if (pane) pane.classList.add('active');
+    event.target.classList.add('active');
+  }
+  function switchTabByName(name) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.remove('active');
+      if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + name + "'")) {
+        b.classList.add('active');
+      }
+    });
+    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+    var pane = document.getElementById('tab-' + name);
+    if (pane) { pane.classList.add('active'); pane.scrollIntoView({behavior:'smooth', block:'start'}); }
+  }
+</script>
+
+</body>
+</html>

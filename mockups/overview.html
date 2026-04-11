@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Overview</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #161b22;
+      border-right: 1px solid #21262d;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    .sidebar-logo {
+      padding: 16px;
+      border-bottom: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-mark {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px; color: #fff;
+      letter-spacing: -0.5px; flex-shrink: 0;
+    }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; line-height: 1.2; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; line-height: 1.2; }
+    .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section-label {
+      padding: 10px 16px 4px;
+      font-size: 10px; font-weight: 600; color: #6e7681;
+      text-transform: uppercase; letter-spacing: 0.7px;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 16px; color: #8b949e; cursor: pointer;
+      font-size: 13px; font-weight: 500;
+      transition: all 0.12s ease; border-left: 2px solid transparent;
+    }
+    .nav-item:hover { background: rgba(33,38,45,0.8); color: #c9d1d9; }
+    .nav-item.active { background: rgba(56,139,253,0.08); color: #388bfd; border-left-color: #388bfd; }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto; background: #21262d; color: #8b949e;
+      font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px;
+    }
+    .nav-item.active .nav-badge { background: rgba(56,139,253,0.15); color: #388bfd; }
+    .nav-live-dot {
+      margin-left: auto; width: 6px; height: 6px; border-radius: 50%;
+      background: #3fb950; animation: live-pulse 2s infinite;
+    }
+    @keyframes live-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(63,185,80,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+    }
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+    .sidebar-bottom {
+      padding: 12px 16px; border-top: 1px solid #21262d;
+      display: flex; align-items: center; gap: 9px;
+    }
+    .user-avatar {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg, #388bfd, #1f6feb);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 12px; font-weight: 600; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .topbar {
+      height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between;
+      background: #0d1117; flex-shrink: 0;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .topbar-time { font-size: 11px; color: #6e7681; font-family: 'SF Mono', 'Consolas', monospace; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 11px; border-radius: 6px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      border: 1px solid transparent; transition: all 0.12s ease; white-space: nowrap;
+    }
+    .btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; border-color: #484f58; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; border-color: #388bfd; }
+    .btn-green { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.3); color: #3fb950; }
+    .btn-green:hover { background: rgba(63,185,80,0.18); }
+
+    .content-scroll { flex: 1; overflow-y: auto; padding: 16px 20px 32px; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+    /* ── SYSTEM HEALTH BAR ── */
+    .health-bar {
+      background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+      padding: 10px 16px; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .health-label { font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; margin-right: 6px; }
+    .health-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 6px;
+      font-size: 11px; font-weight: 500;
+    }
+    .health-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .health-ok { background: rgba(63,185,80,0.08); color: #3fb950; border: 1px solid rgba(63,185,80,0.2); }
+    .health-ok .health-dot { background: #3fb950; animation: live-pulse 2s infinite; }
+    .health-warn { background: rgba(210,153,34,0.08); color: #d29922; border: 1px solid rgba(210,153,34,0.2); }
+    .health-warn .health-dot { background: #d29922; }
+    .health-meta { font-size: 10px; color: #6e7681; margin-left: 2px; }
+    .health-divider { width: 1px; height: 16px; background: #21262d; margin: 0 4px; }
+    .health-updated { margin-left: auto; font-size: 10px; color: #6e7681; }
+
+    /* ── SUMMARY CARDS ── */
+    .summary-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;
+    }
+    .summary-card {
+      background: #161b22; border: 1px solid #21262d; border-radius: 10px; padding: 14px 16px;
+    }
+    .sc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .sc-title { font-size: 11px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .sc-action { font-size: 11px; color: #388bfd; cursor: pointer; }
+    .sc-action:hover { text-decoration: underline; }
+    .sc-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .sc-metric-label { font-size: 10px; color: #6e7681; margin-bottom: 3px; }
+    .sc-metric-value { font-size: 18px; font-weight: 700; color: #e6edf3; letter-spacing: -0.5px; line-height: 1; }
+    .sc-metric-value.green { color: #3fb950; }
+    .sc-metric-value.red { color: #f85149; }
+    .sc-metric-value.blue { color: #388bfd; }
+    .sc-metric-sub { font-size: 10px; color: #6e7681; margin-top: 2px; }
+
+    /* ── SECTION HEADER ── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .section-title { font-size: 12px; font-weight: 700; color: #e6edf3; letter-spacing: -0.1px; }
+    .section-meta { font-size: 11px; color: #6e7681; }
+
+    /* ── TABLES ── */
+    .table-wrap {
+      background: #161b22; border: 1px solid #21262d; border-radius: 10px;
+      overflow: hidden; margin-bottom: 14px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 9px 14px; text-align: left;
+      font-size: 10px; font-weight: 600; color: #6e7681;
+      text-transform: uppercase; letter-spacing: 0.6px;
+      border-bottom: 1px solid #21262d; background: #161b22;
+      white-space: nowrap;
+    }
+    thead th.right { text-align: right; }
+    tbody tr { border-bottom: 1px solid #21262d; transition: background 0.1s; cursor: pointer; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(33,38,45,0.6); }
+    tbody td { padding: 9px 14px; font-size: 12px; color: #c9d1d9; vertical-align: middle; }
+    tbody td.right { text-align: right; }
+    tbody td.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 8px; border-radius: 20px;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.2px;
+    }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .s-completed { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-completed .status-dot { background: #3fb950; }
+    .s-running { background: rgba(56,139,253,0.1); color: #388bfd; border: 1px solid rgba(56,139,253,0.25); }
+    .s-running .status-dot { background: #388bfd; animation: live-pulse 1.5s infinite; }
+    .s-queued { background: rgba(210,153,34,0.1); color: #d29922; border: 1px solid rgba(210,153,34,0.25); }
+    .s-queued .status-dot { background: #d29922; }
+    .s-failed { background: rgba(248,81,73,0.1); color: #f85149; border: 1px solid rgba(248,81,73,0.25); }
+    .s-failed .status-dot { background: #f85149; }
+    .s-live { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-live .status-dot { background: #3fb950; animation: live-pulse 2s infinite; }
+
+    .pnl-positive { color: #3fb950; font-weight: 600; }
+    .pnl-negative { color: #f85149; font-weight: 600; }
+    .pnl-na { color: #6e7681; }
+
+    .strategy-name { font-weight: 600; color: #e6edf3; }
+    .strategy-sub { font-size: 10px; color: #6e7681; margin-top: 1px; }
+
+    .link-arrow {
+      display: inline-flex; align-items: center; gap: 3px;
+      font-size: 11px; color: #388bfd; cursor: pointer;
+    }
+    .link-arrow:hover { text-decoration: underline; }
+
+    .empty-state {
+      text-align: center; padding: 40px 20px;
+    }
+    .empty-state-text { color: #6e7681; font-size: 12px; }
+
+    /* ── LIVE SECTION SPLIT ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">ATP</div>
+    <div>
+      <div class="logo-text-primary">AlgoTrader</div>
+      <div class="logo-text-secondary">Algorithmic Trading Platform</div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Platform</div>
+    <div class="nav-item active">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M1.5 1.75a.25.25 0 00-.25.25v11.5c0 .138.112.25.25.25h13a.25.25 0 00.25-.25V3.5H12a.5.5 0 01-.5-.5V1.5H1.75zM1.5 0h10.086a.5.5 0 01.354.146l2.914 2.914A.5.5 0 0115 3.5V13.25a1.75 1.75 0 01-1.75 1.75H1.75A1.75 1.75 0 010 13.25V1.75C0 .784.784 0 1.75 0H1.5z"/>
+      </svg>
+      Overview
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8A1 1 0 003 13.5v.75A1.75 1.75 0 011.25 16h-.5A1.75 1.75 0 010 14.25v-12A2.5 2.5 0 012 2.5z"/>
+      </svg>
+      Strategies
+      <span class="nav-badge">6</span>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Trading</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1zM0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/>
+      </svg>
+      Backtests
+      <span class="nav-badge">47</span>
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM0 8a8 8 0 1116 0A8 8 0 010 8z"/><path d="M6.5 5.5a.5.5 0 011 0v2.793l1.854 1.853a.5.5 0 01-.708.708l-2-2A.5.5 0 016.5 8.5V5.5z"/>
+      </svg>
+      Live Trading
+      <div class="nav-live-dot"></div>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-section-label">Account</div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M10.561 8.073a6.005 6.005 0 013.432 4.177.75.75 0 11-1.494.15 4.5 4.5 0 00-8.997 0 .75.75 0 01-1.494-.15 6.005 6.005 0 013.432-4.177 3.5 3.5 0 111.121 0z"/>
+      </svg>
+      Profile
+    </div>
+    <div class="nav-item">
+      <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M7.429 1.525a6.593 6.593 0 011.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.417.278.97.423 1.53.281l1.086-.328a.158.158 0 01.161.045 6.414 6.414 0 01.792.979.158.158 0 01-.01.161l-.69.904c-.359.471-.43 1.051-.244 1.557.07.192.127.387.17.584.117.554.491.977.966 1.215l1.005.558a.158.158 0 01.086.144 6.602 6.602 0 010 1.141.158.158 0 01-.09.137l-1.008.553c-.476.233-.853.658-.966 1.21a5.963 5.963 0 01-.17.585c-.187.507-.115 1.086.244 1.557l.69.904a.158.158 0 01.008.161 6.414 6.414 0 01-.793.979.158.158 0 01-.16.044l-1.087-.327c-.56-.142-1.113 0-1.53.28-.16.107-.327.204-.5.29-.449.222-.851.628-.999 1.188l-.289 1.105c-.029.11-.1.143-.137.146a6.6 6.6 0 01-1.142 0c-.036-.003-.108-.037-.137-.146l-.289-1.105c-.148-.56-.55-.966-.999-1.188a5.39 5.39 0 01-.5-.29c-.417-.278-.97-.423-1.529-.28l-1.088.327a.158.158 0 01-.16-.045 6.41 6.41 0 01-.792-.978.158.158 0 01.008-.161l.69-.904c.36-.471.43-1.05.244-1.557a5.949 5.949 0 01-.17-.585c-.117-.552-.49-.977-.966-1.21l-1.008-.553a.158.158 0 01-.09-.137 6.597 6.597 0 010-1.141.158.158 0 01.086-.144l1.005-.558c.475-.238.849-.661.966-1.215.043-.197.1-.392.17-.584.187-.507.115-1.086-.244-1.557l-.69-.904a.158.158 0 01-.008-.16 6.414 6.414 0 01.792-.98.158.158 0 01.161-.044l1.086.328c.56.142 1.113 0 1.53-.281.16-.107.327-.204.5-.29.449-.222.851-.628.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/>
+      </svg>
+      Settings
+    </div>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="user-avatar">AK</div>
+    <div class="user-info">
+      <div class="user-name">Andrew K.</div>
+      <div class="user-plan">Pro plan</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="page-title">Overview</span>
+    </div>
+    <div class="topbar-right">
+      <span class="topbar-time">Fri Apr 11, 2026 &nbsp;|&nbsp; 09:34:21 EST</span>
+      <button class="btn btn-ghost">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 7.5h13a.5.5 0 000-1h-13a.5.5 0 000 1zM0 3.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zm0 9a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5z"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-primary">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"/></svg>
+        New Backtest
+      </button>
+    </div>
+  </div>
+
+  <div class="content-scroll">
+
+    <!-- SYSTEM HEALTH -->
+    <div class="health-bar">
+      <span class="health-label">System</span>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        Kafka
+        <span class="health-meta">3 brokers</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        Celery
+        <span class="health-meta">4 workers</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        Redis
+        <span class="health-meta">0.3ms latency</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        Go API
+        <span class="health-meta">12ms p99</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        PostgreSQL
+        <span class="health-meta">healthy</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-item health-ok">
+        <div class="health-dot"></div>
+        Alpaca Feed
+        <span class="health-meta">1,247 msg/s</span>
+      </div>
+      <span class="health-updated">Updated 14s ago</span>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div class="summary-grid">
+      <!-- Backtests summary -->
+      <div class="summary-card">
+        <div class="sc-header">
+          <span class="sc-title">Backtests — All Time</span>
+          <span class="sc-action">View all</span>
+        </div>
+        <div class="sc-metrics">
+          <div>
+            <div class="sc-metric-label">Total Runs</div>
+            <div class="sc-metric-value blue">47</div>
+            <div class="sc-metric-sub">across 6 strategies</div>
+          </div>
+          <div>
+            <div class="sc-metric-label">Best Net Profit</div>
+            <div class="sc-metric-value green">+22.3%</div>
+            <div class="sc-metric-sub">MA Crossover</div>
+          </div>
+          <div>
+            <div class="sc-metric-label">Avg Sharpe</div>
+            <div class="sc-metric-value">1.24</div>
+            <div class="sc-metric-sub">completed runs</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live summary -->
+      <div class="summary-card" style="border-color: rgba(63,185,80,0.2);">
+        <div class="sc-header">
+          <span class="sc-title">Live Trading</span>
+          <span class="sc-action">Go to Live</span>
+        </div>
+        <div class="sc-metrics">
+          <div>
+            <div class="sc-metric-label">Active Strategies</div>
+            <div class="sc-metric-value blue">2</div>
+            <div class="sc-metric-sub">running now</div>
+          </div>
+          <div>
+            <div class="sc-metric-label">Today's P&L</div>
+            <div class="sc-metric-value green">+$4,823</div>
+            <div class="sc-metric-sub">combined</div>
+          </div>
+          <div>
+            <div class="sc-metric-label">Open Positions</div>
+            <div class="sc-metric-value">7</div>
+            <div class="sc-metric-sub">across strategies</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECENT BACKTESTS -->
+    <div class="section-header">
+      <span class="section-title">Recent Backtests</span>
+      <span class="section-meta">Showing 5 of 47</span>
+    </div>
+    <div class="table-wrap" style="margin-bottom: 14px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Date Range</th>
+            <th>Capital</th>
+            <th>Status</th>
+            <th class="right">Net Profit</th>
+            <th class="right">Sharpe</th>
+            <th class="right">Max DD</th>
+            <th>Duration</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="strategy-name">MA Crossover</div>
+              <div class="strategy-sub">job_a3f9c1</div>
+            </td>
+            <td class="mono">Jan 1 – Dec 31, 2023</td>
+            <td class="mono">$100,000</td>
+            <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+            <td class="right"><span class="pnl-positive">+22.31%</span></td>
+            <td class="right">1.87</td>
+            <td class="right"><span class="pnl-negative">-8.4%</span></td>
+            <td class="mono">41s</td>
+            <td class="right"><span class="link-arrow">View →</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="strategy-name">Pairs Trading ETF</div>
+              <div class="strategy-sub">job_b2e8d0</div>
+            </td>
+            <td class="mono">Jan 1 – Dec 31, 2022</td>
+            <td class="mono">$250,000</td>
+            <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+            <td class="right"><span class="pnl-positive">+11.24%</span></td>
+            <td class="right">1.33</td>
+            <td class="right"><span class="pnl-negative">-5.1%</span></td>
+            <td class="mono">58s</td>
+            <td class="right"><span class="link-arrow">View →</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="strategy-name">RSI Mean Reversion</div>
+              <div class="strategy-sub">job_c7a1b5</div>
+            </td>
+            <td class="mono">Jan 1 – Dec 31, 2022</td>
+            <td class="mono">$100,000</td>
+            <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+            <td class="right"><span class="pnl-negative">-3.12%</span></td>
+            <td class="right">0.42</td>
+            <td class="right"><span class="pnl-negative">-14.8%</span></td>
+            <td class="mono">37s</td>
+            <td class="right"><span class="link-arrow">View →</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="strategy-name">Momentum Breakout</div>
+              <div class="strategy-sub">job_d4f2e9</div>
+            </td>
+            <td class="mono">Jan 1 – Mar 31, 2023</td>
+            <td class="mono">$50,000</td>
+            <td><span class="status-badge s-failed"><span class="status-dot"></span>Failed</span></td>
+            <td class="right"><span class="pnl-na">—</span></td>
+            <td class="right"><span class="pnl-na">—</span></td>
+            <td class="right"><span class="pnl-na">—</span></td>
+            <td class="mono">12s</td>
+            <td class="right"><span class="link-arrow">View →</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="strategy-name">SPY Buy-and-Hold</div>
+              <div class="strategy-sub">job_1535553589</div>
+            </td>
+            <td class="mono">Oct 7 – Oct 11, 2013</td>
+            <td class="mono">$100,000</td>
+            <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+            <td class="right"><span class="pnl-positive">+1.69%</span></td>
+            <td class="right">8.854</td>
+            <td class="right"><span class="pnl-negative">-2.20%</span></td>
+            <td class="mono">16s</td>
+            <td class="right"><span class="link-arrow">View →</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ACTIVE LIVE STRATEGIES -->
+    <div class="section-header">
+      <span class="section-title">Active Live Strategies</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="status-badge s-live" style="font-size:10px;"><span class="status-dot"></span>2 Running</span>
+        <span class="sc-action" style="font-size:11px; color:#388bfd; cursor:pointer;">Go to Live Trading</span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Started</th>
+            <th>Capital Deployed</th>
+            <th>Status</th>
+            <th class="right">Unrealized P&L</th>
+            <th class="right">Today's Return</th>
+            <th class="right">Open Positions</th>
+            <th class="right">Orders Today</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="strategy-name">MA Crossover</div>
+              <div class="strategy-sub">live_x9k2m1</div>
+            </td>
+            <td class="mono">09:31:02 EST today</td>
+            <td class="mono">$100,000</td>
+            <td><span class="status-badge s-live"><span class="status-dot"></span>Running</span></td>
+            <td class="right"><span class="pnl-positive">+$2,341.80</span></td>
+            <td class="right"><span class="pnl-positive">+2.34%</span></td>
+            <td class="right">4</td>
+            <td class="right">12</td>
+            <td class="right"><span class="link-arrow">Monitor →</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="strategy-name">RSI Mean Reversion</div>
+              <div class="strategy-sub">live_y3p8n7</div>
+            </td>
+            <td class="mono">08:31:02 EST today</td>
+            <td class="mono">$50,000</td>
+            <td><span class="status-badge s-live"><span class="status-dot"></span>Running</span></td>
+            <td class="right"><span class="pnl-positive">+$481.50</span></td>
+            <td class="right"><span class="pnl-positive">+0.96%</span></td>
+            <td class="right">3</td>
+            <td class="right">7</td>
+            <td class="right"><span class="link-arrow">Monitor →</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- end content-scroll -->
+</div><!-- end main -->
+
+</body>
+</html>
