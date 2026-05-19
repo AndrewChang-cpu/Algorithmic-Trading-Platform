@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Strategy Detail</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117; color: #c9d1d9;
+      height: 100vh; display: flex; overflow: hidden;
+      font-size: 13px; -webkit-font-smoothing: antialiased;
+    }
+
+    /* SIDEBAR */
+    .sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #21262d; display: flex; flex-direction: column; height: 100vh; }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 30px; height: 30px; background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #fff; }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; line-height: 1.2; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; }
+    .sidebar-nav { flex: 1; padding: 10px 0; overflow-y: auto; }
+    .nav-section-label { padding: 10px 16px 4px; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.7px; }
+    .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 16px; color: #8b949e; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.12s; border-left: 2px solid transparent; }
+    .nav-item:hover { background: rgba(33,38,45,0.8); color: #c9d1d9; }
+    .nav-item.active { background: rgba(56,139,253,0.08); color: #388bfd; border-left-color: #388bfd; }
+    .nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
+    .nav-badge { margin-left: auto; background: #21262d; color: #8b949e; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; }
+    .nav-item.active .nav-badge { background: rgba(56,139,253,0.15); color: #388bfd; }
+    .nav-divider { height: 1px; background: #21262d; margin: 6px 0; }
+    .sidebar-bottom { padding: 12px 16px; border-top: 1px solid #21262d; display: flex; align-items: center; gap: 9px; }
+    .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #388bfd, #1f6feb); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 12px; font-weight: 600; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .user-plan { font-size: 10px; color: #6e7681; }
+
+    /* MAIN */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .topbar { height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d1117; flex-shrink: 0; }
+    .topbar-left { display: flex; align-items: center; gap: 8px; }
+    .breadcrumb { font-size: 12px; color: #6e7681; }
+    .breadcrumb a { color: #388bfd; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .sep { color: #484f58; margin: 0 4px; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .topbar-right { display: flex; align-items: center; gap: 7px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.12s; white-space: nowrap; font-family: inherit; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-green { background: rgba(63,185,80,0.1); border-color: rgba(63,185,80,0.3); color: #3fb950; }
+    .btn-green:hover { background: rgba(63,185,80,0.18); }
+    .btn-danger { background: transparent; border-color: rgba(248,81,73,0.3); color: #f85149; }
+    .btn-danger:hover { background: rgba(248,81,73,0.08); }
+
+    .content-scroll { flex: 1; overflow-y: auto; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+    /* Strategy header */
+    .strategy-header {
+      padding: 16px 20px 0;
+    }
+    .sh-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .sh-left { }
+    .sh-name { font-size: 20px; font-weight: 700; color: #e6edf3; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
+    .version-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600;
+      background: rgba(56,139,253,0.1); border: 1px solid rgba(56,139,253,0.25); color: #388bfd;
+    }
+    .sh-meta { font-size: 11px; color: #6e7681; margin-top: 4px; }
+    .sh-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+    /* Aggregate stats bar */
+    .stats-bar {
+      display: flex; gap: 0; border: 1px solid #21262d; border-radius: 8px;
+      overflow: hidden; margin: 12px 0 0;
+      background: #161b22;
+    }
+    .stat-cell {
+      flex: 1; padding: 10px 14px; border-right: 1px solid #21262d;
+    }
+    .stat-cell:last-child { border-right: none; }
+    .stat-label { font-size: 10px; color: #6e7681; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-value { font-size: 16px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; font-family: 'SF Mono', 'Consolas', monospace; }
+    .stat-value.green { color: #3fb950; }
+    .stat-sub { font-size: 10px; color: #6e7681; margin-top: 2px; }
+
+    /* Tabs */
+    .tab-nav {
+      display: flex; padding: 0 20px; border-bottom: 1px solid #21262d;
+      margin-top: 14px;
+    }
+    .tab-item {
+      padding: 9px 14px; font-size: 12px; font-weight: 600; color: #6e7681;
+      cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: all 0.1s;
+    }
+    .tab-item:hover { color: #c9d1d9; }
+    .tab-item.active { color: #e6edf3; border-bottom-color: #388bfd; }
+
+    /* Code panel */
+    .code-panel { padding: 16px 20px; }
+    .code-toolbar {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+    }
+    .code-toolbar-left { display: flex; align-items: center; gap: 8px; }
+    .version-select {
+      background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+      padding: 4px 10px; color: #c9d1d9; font-size: 12px; outline: none;
+      font-family: inherit; cursor: pointer;
+    }
+    .version-select:focus { border-color: #388bfd; }
+    .code-meta { font-size: 11px; color: #6e7681; }
+
+    .code-block {
+      background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; border-bottom: 1px solid #21262d; background: #161b22;
+    }
+    .code-filename { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #6e7681; }
+    .code-lang { font-size: 10px; color: #484f58; font-family: 'SF Mono', monospace; }
+    pre {
+      padding: 14px; overflow-x: auto; font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.6; color: #c9d1d9;
+    }
+    .kw { color: #ff7b72; }
+    .fn { color: #d2a8ff; }
+    .str { color: #a5d6ff; }
+    .cm { color: #8b949e; font-style: italic; }
+    .nb { color: #79c0ff; }
+    .num { color: #f2cc60; }
+
+    /* Runs panel */
+    .runs-panel { padding: 16px 20px; }
+    .table-wrap { background: #161b22; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { padding: 9px 14px; text-align: left; font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.6px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+    thead th.right { text-align: right; }
+    tbody tr { border-bottom: 1px solid #21262d; cursor: pointer; transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(33,38,45,0.6); }
+    tbody td { padding: 9px 14px; font-size: 12px; color: #c9d1d9; vertical-align: middle; }
+    tbody td.right { text-align: right; }
+    tbody td.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; }
+
+    .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .s-completed { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.25); }
+    .s-completed .status-dot { background: #3fb950; }
+    .s-running { background: rgba(56,139,253,0.1); color: #388bfd; border: 1px solid rgba(56,139,253,0.25); }
+    .s-running .status-dot { background: #388bfd; animation: pulse 1.5s infinite; }
+    .s-failed { background: rgba(248,81,73,0.1); color: #f85149; border: 1px solid rgba(248,81,73,0.25); }
+    .s-failed .status-dot { background: #f85149; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .type-badge { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+    .type-backtest { background: rgba(56,139,253,0.1); color: #388bfd; border: 1px solid rgba(56,139,253,0.2); }
+    .type-live { background: rgba(63,185,80,0.1); color: #3fb950; border: 1px solid rgba(63,185,80,0.2); }
+
+    .pnl-pos { color: #3fb950; font-weight: 600; font-family: 'SF Mono', monospace; }
+    .pnl-neg { color: #f85149; font-weight: 600; font-family: 'SF Mono', monospace; }
+    .pnl-na { color: #6e7681; }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+  </style>
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">AT</div>
+      <div>
+        <div class="logo-text-primary">Algo Trading</div>
+        <div class="logo-text-secondary">Paper trading platform</div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Platform</div>
+      <div class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Overview
+      </div>
+      <div class="nav-item active">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M9 12h6m-3-3v6M12 3C7.03 3 3 7.03 3 12s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z"/></svg>
+        Strategies
+        <span class="nav-badge">3</span>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-section-label">Jobs</div>
+      <div class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Backtests
+        <span class="nav-badge">12</span>
+      </div>
+      <div class="nav-item">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Live Trading
+        <span class="nav-live-dot" style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:#3fb950;animation:lp 2s infinite"></span>
+      </div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-avatar">AC</div>
+      <div class="user-info">
+        <div class="user-name">Andrew Chang</div>
+        <div class="user-plan">andrew@example.com</div>
+      </div>
+    </div>
+  </div>
+  <style>@keyframes lp{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(63,185,80,.4)}50%{opacity:.7;box-shadow:0 0 0 4px rgba(63,185,80,0)}}</style>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="breadcrumb">
+          <a href="#">Strategies</a>
+          <span class="sep">/</span>
+          <span style="color:#e6edf3;font-weight:600">RSI Pullback v3</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Upload v4
+        </button>
+        <button class="btn btn-primary">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Run Backtest
+        </button>
+        <button class="btn btn-green">
+          <svg width="12" height="12" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="4"/></svg>
+          Go Live
+        </button>
+        <button class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+
+    <div class="content-scroll">
+      <div class="strategy-header">
+        <div class="sh-top">
+          <div class="sh-left">
+            <div class="sh-name">
+              RSI Pullback Strategy
+              <span class="version-badge">v3 latest</span>
+            </div>
+            <div class="sh-meta">Uploaded 2026-05-14 &nbsp;&#183;&nbsp; Python &nbsp;&#183;&nbsp; rsi_pullback.py &nbsp;&#183;&nbsp; 2.4 KB</div>
+          </div>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="stats-bar">
+          <div class="stat-cell">
+            <div class="stat-label">Total runs</div>
+            <div class="stat-value">12</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Best Sharpe</div>
+            <div class="stat-value">2.43</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Best return</div>
+            <div class="stat-value green">+24.7%</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Avg return</div>
+            <div class="stat-value">+9.2%</div>
+          </div>
+          <div class="stat-cell">
+            <div class="stat-label">Versions</div>
+            <div class="stat-value">3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tab-nav">
+        <div class="tab-item active" onclick="switchTab('code', this)">Code</div>
+        <div class="tab-item" onclick="switchTab('runs', this)">Runs (12)</div>
+      </div>
+
+      <!-- Code tab -->
+      <div class="tab-pane active" id="pane-code">
+        <div class="code-panel">
+          <div class="code-toolbar">
+            <div class="code-toolbar-left">
+              <select class="version-select">
+                <option selected>v3 (latest) — 2026-05-14</option>
+                <option>v2 — 2026-04-28</option>
+                <option>v1 — 2026-03-15</option>
+              </select>
+              <span class="code-meta">rsi_pullback.py &nbsp;&#183;&nbsp; 2.4 KB</span>
+            </div>
+          </div>
+          <div class="code-block">
+            <div class="code-header">
+              <span class="code-filename">rsi_pullback.py</span>
+              <span class="code-lang">Python · LEAN QCAlgorithm</span>
+            </div>
+<pre><span class="kw">from</span> <span class="nb">AlgorithmImports</span> <span class="kw">import</span> *
+
+<span class="kw">class</span> <span class="fn">RSIPullbackAlgorithm</span>(QCAlgorithm):
+
+    <span class="kw">def</span> <span class="fn">Initialize</span>(<span class="nb">self</span>):
+        <span class="nb">self</span>.SetStartDate(<span class="num">2022</span>, <span class="num">1</span>, <span class="num">1</span>)
+        <span class="nb">self</span>.SetEndDate(<span class="num">2024</span>, <span class="num">1</span>, <span class="num">1</span>)
+        <span class="nb">self</span>.SetCash(<span class="num">100000</span>)
+
+        <span class="cm"># Add SPY with daily resolution</span>
+        <span class="nb">self</span>.spy = <span class="nb">self</span>.AddEquity(<span class="str">"SPY"</span>, Resolution.Daily).Symbol
+        <span class="nb">self</span>.aapl = <span class="nb">self</span>.AddEquity(<span class="str">"AAPL"</span>, Resolution.Daily).Symbol
+
+        <span class="cm"># RSI indicators</span>
+        <span class="nb">self</span>.rsi_spy = <span class="nb">self</span>.RSI(<span class="nb">self</span>.spy, <span class="num">14</span>, MovingAverageType.Simple, Resolution.Daily)
+        <span class="nb">self</span>.rsi_aapl = <span class="nb">self</span>.RSI(<span class="nb">self</span>.aapl, <span class="num">14</span>, MovingAverageType.Simple, Resolution.Daily)
+
+    <span class="kw">def</span> <span class="fn">OnData</span>(<span class="nb">self</span>, data):
+        <span class="kw">if not</span> (<span class="nb">self</span>.rsi_spy.IsReady <span class="kw">and</span> <span class="nb">self</span>.rsi_aapl.IsReady):
+            <span class="kw">return</span>
+
+        <span class="cm"># Buy on RSI oversold (< 30)</span>
+        <span class="kw">if</span> <span class="nb">self</span>.rsi_spy.Current.Value &lt; <span class="num">30</span> <span class="kw">and not</span> <span class="nb">self</span>.Portfolio[<span class="nb">self</span>.spy].Invested:
+            <span class="nb">self</span>.SetHoldings(<span class="nb">self</span>.spy, <span class="num">0.5</span>)
+
+        <span class="cm"># Sell on RSI overbought (> 70)</span>
+        <span class="kw">elif</span> <span class="nb">self</span>.rsi_spy.Current.Value &gt; <span class="num">70</span> <span class="kw">and</span> <span class="nb">self</span>.Portfolio[<span class="nb">self</span>.spy].Invested:
+            <span class="nb">self</span>.Liquidate(<span class="nb">self</span>.spy)</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Runs tab -->
+      <div class="tab-pane" id="pane-runs">
+        <div class="runs-panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Version</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Data source</th>
+                  <th class="right">Net P&L</th>
+                  <th class="right">Sharpe</th>
+                  <th class="right">Max DD</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">#12</td>
+                  <td><span class="version-badge" style="font-size:10px">v3</span></td>
+                  <td><span class="type-badge type-backtest">Backtest</span></td>
+                  <td><span class="status-badge s-running"><span class="status-dot"></span>Running</span></td>
+                  <td style="color:#6e7681;font-size:11px">Alpaca</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td style="font-size:11px;color:#6e7681">2026-05-15 09:41</td>
+                </tr>
+                <tr>
+                  <td class="mono">#11</td>
+                  <td><span class="version-badge" style="font-size:10px">v3</span></td>
+                  <td><span class="type-badge type-backtest">Backtest</span></td>
+                  <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+                  <td style="color:#6e7681;font-size:11px">Alpaca</td>
+                  <td class="right mono pnl-pos">+24.7%</td>
+                  <td class="right mono">2.43</td>
+                  <td class="right mono" style="color:#f85149">-8.2%</td>
+                  <td style="font-size:11px;color:#6e7681">2026-05-14 14:23</td>
+                </tr>
+                <tr>
+                  <td class="mono">#10</td>
+                  <td><span class="version-badge" style="font-size:10px;background:rgba(139,148,158,0.1);border-color:#484f58;color:#8b949e">v2</span></td>
+                  <td><span class="type-badge type-live">Live</span></td>
+                  <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+                  <td style="color:#6e7681;font-size:11px">Live feed</td>
+                  <td class="right mono pnl-pos">+3.1%</td>
+                  <td class="right mono">1.87</td>
+                  <td class="right mono" style="color:#f85149">-2.4%</td>
+                  <td style="font-size:11px;color:#6e7681">2026-05-12 10:00</td>
+                </tr>
+                <tr>
+                  <td class="mono">#9</td>
+                  <td><span class="version-badge" style="font-size:10px;background:rgba(139,148,158,0.1);border-color:#484f58;color:#8b949e">v2</span></td>
+                  <td><span class="type-badge type-backtest">Backtest</span></td>
+                  <td><span class="status-badge s-failed"><span class="status-dot"></span>Failed</span></td>
+                  <td style="color:#6e7681;font-size:11px">CSV</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td class="right mono pnl-na">—</td>
+                  <td style="font-size:11px;color:#6e7681">2026-05-10 16:55</td>
+                </tr>
+                <tr>
+                  <td class="mono">#8</td>
+                  <td><span class="version-badge" style="font-size:10px;background:rgba(139,148,158,0.1);border-color:#484f58;color:#8b949e">v1</span></td>
+                  <td><span class="type-badge type-backtest">Backtest</span></td>
+                  <td><span class="status-badge s-completed"><span class="status-dot"></span>Completed</span></td>
+                  <td style="color:#6e7681;font-size:11px">Alpaca</td>
+                  <td class="right mono pnl-neg">-4.2%</td>
+                  <td class="right mono" style="color:#f85149">0.31</td>
+                  <td class="right mono" style="color:#f85149">-18.7%</td>
+                  <td style="font-size:11px;color:#6e7681">2026-04-29 11:14</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(id, el) {
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+      document.getElementById('pane-' + id).classList.add('active');
+      el.classList.add('active');
+    }
+  </script>
+</body>
+</html>

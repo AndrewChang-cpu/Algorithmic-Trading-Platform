@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Run Backtest Modal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117; color: #c9d1d9;
+      height: 100vh; display: flex; overflow: hidden;
+      font-size: 13px; -webkit-font-smoothing: antialiased;
+    }
+
+    /* Sidebar (collapsed background) */
+    .sidebar { width: 220px; min-width: 220px; background: #161b22; border-right: 1px solid #21262d; display: flex; flex-direction: column; height: 100vh; opacity: 0.3; }
+    .sidebar-logo { padding: 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 10px; }
+    .logo-mark { width: 30px; height: 30px; background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; color: #fff; }
+    .logo-text-primary { font-size: 13px; font-weight: 700; color: #e6edf3; }
+    .logo-text-secondary { font-size: 10px; color: #6e7681; }
+
+    /* Main with blur */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; position: relative; }
+    .topbar { height: 46px; padding: 0 20px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d1117; opacity: 0.3; }
+    .page-title { font-size: 14px; font-weight: 700; color: #e6edf3; }
+    .page-content { flex: 1; overflow: hidden; filter: blur(2px); opacity: 0.3; padding: 16px 20px; }
+
+    /* Demo bar */
+    .demo-bar {
+      position: absolute; top: 10px; right: 12px; z-index: 20;
+      display: flex; align-items: center; gap: 6px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 6px 10px;
+    }
+    .demo-label { font-size: 10px; color: #6e7681; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-right: 4px; }
+    .demo-btn { padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; border: 1px solid #30363d; background: transparent; color: #8b949e; font-family: inherit; transition: all 0.1s; }
+    .demo-btn:hover { background: #21262d; color: #c9d1d9; }
+    .demo-btn.active { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #388bfd; }
+
+    /* Modal overlay */
+    .modal-overlay {
+      position: absolute; inset: 0;
+      background: rgba(1,4,9,0.72);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; backdrop-filter: blur(2px);
+    }
+
+    /* Modal */
+    .modal {
+      background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      width: 480px; max-width: 95vw;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.65); overflow: hidden;
+    }
+    .modal-header {
+      padding: 14px 18px; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.2px; }
+    .modal-subtitle { font-size: 11px; color: #6e7681; margin-top: 1px; }
+    .step-track { display: flex; align-items: center; gap: 5px; }
+    .step-pip { display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: #6e7681; }
+    .step-pip.active { color: #388bfd; }
+    .step-pip.done { color: #3fb950; }
+    .step-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #6e7681; }
+    .step-pip.active .step-dot { border-color: #388bfd; color: #388bfd; background: rgba(56,139,253,0.1); }
+    .step-pip.done .step-dot { border-color: #3fb950; background: rgba(63,185,80,0.1); color: #3fb950; }
+    .step-connector { width: 16px; height: 1px; background: #30363d; }
+    .step-connector.done { background: #3fb950; }
+    .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid #30363d; background: transparent; color: #6e7681; cursor: pointer; font-family: inherit; font-size: 15px; transition: all 0.12s; }
+    .modal-close:hover { background: #21262d; color: #c9d1d9; }
+
+    .modal-body { padding: 18px; }
+    .modal-footer {
+      padding: 12px 18px; border-top: 1px solid #21262d;
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    }
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid transparent; transition: all 0.12s; white-space: nowrap; font-family: inherit; }
+    .btn-ghost { background: transparent; border-color: #30363d; color: #8b949e; }
+    .btn-ghost:hover { background: #21262d; color: #c9d1d9; }
+    .btn-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-primary:disabled { background: #21262d; color: #6e7681; cursor: not-allowed; border-color: #21262d; }
+
+    /* Step 1: Data source cards */
+    .info-note {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 9px 12px; border-radius: 6px; margin-bottom: 14px;
+      background: rgba(56,139,253,0.06); border: 1px solid rgba(56,139,253,0.2);
+      color: #8b949e; font-size: 11px; line-height: 1.5;
+    }
+    .info-icon { color: #388bfd; flex-shrink: 0; font-size: 13px; margin-top: 0px; }
+
+    .source-cards { display: grid; gap: 8px; }
+    .source-card {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 14px; border-radius: 8px;
+      border: 1.5px solid #30363d; background: #0d1117;
+      cursor: pointer; transition: all 0.12s;
+    }
+    .source-card:hover { border-color: #484f58; }
+    .source-card.selected { border-color: #388bfd; background: rgba(56,139,253,0.05); }
+    .radio-circle {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1.5px solid #484f58; flex-shrink: 0; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.12s;
+    }
+    .source-card.selected .radio-circle { border-color: #388bfd; }
+    .radio-dot { width: 7px; height: 7px; border-radius: 50%; background: #388bfd; display: none; }
+    .source-card.selected .radio-dot { display: block; }
+    .source-info { flex: 1; }
+    .source-title { font-size: 13px; font-weight: 600; color: #e6edf3; margin-bottom: 2px; }
+    .source-desc { font-size: 11px; color: #6e7681; line-height: 1.4; }
+    .source-tag {
+      font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 4px; margin-top: 5px; display: inline-block;
+      background: rgba(56,139,253,0.1); color: #388bfd; border: 1px solid rgba(56,139,253,0.2);
+    }
+    .source-tag.csv-tag {
+      background: rgba(210,153,34,0.1); color: #d29922; border-color: rgba(210,153,34,0.2);
+    }
+
+    /* Step 2: CSV upload */
+    .dropzone {
+      border: 1.5px dashed #30363d; border-radius: 8px;
+      padding: 28px 20px; text-align: center; cursor: pointer;
+      transition: all 0.15s; background: #0d1117; margin-bottom: 12px;
+    }
+    .dropzone:hover { border-color: #388bfd; background: rgba(56,139,253,0.04); }
+    .dz-icon { color: #6e7681; margin-bottom: 8px; font-size: 28px; }
+    .dz-title { font-size: 13px; font-weight: 600; color: #c9d1d9; margin-bottom: 3px; }
+    .dz-sub { font-size: 11px; color: #6e7681; }
+    .dz-sub b { color: #388bfd; }
+    .dz-constraint { font-size: 10px; color: #484f58; margin-top: 5px; }
+
+    .csv-format-hint {
+      background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+      padding: 9px 12px; margin-bottom: 0;
+    }
+    .csv-hint-label { font-size: 10px; font-weight: 600; color: #6e7681; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+    .csv-hint-code { font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #8b949e; line-height: 1.6; }
+    .csv-hint-code .hl { color: #79c0ff; }
+
+    /* Step 3: Queued */
+    .success-block { text-align: center; padding: 12px 0; }
+    .success-icon { font-size: 40px; margin-bottom: 10px; }
+    .success-title { font-size: 15px; font-weight: 700; color: #e6edf3; margin-bottom: 6px; }
+    .success-sub { font-size: 12px; color: #6e7681; margin-bottom: 14px; }
+    .job-id-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 6px;
+      background: #0d1117; border: 1px solid #21262d;
+      font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #6e7681;
+    }
+    .job-id-label { color: #484f58; }
+    .view-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: #388bfd; font-size: 12px; font-weight: 500; text-decoration: none; cursor: pointer; }
+    .view-link:hover { text-decoration: underline; }
+
+    /* Pane visibility */
+    .step-pane { display: none; }
+    .step-pane.active { display: block; }
+  </style>
+</head>
+<body>
+  <!-- blurred background -->
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">AT</div>
+      <div>
+        <div class="logo-text-primary">Algo Trading</div>
+        <div class="logo-text-secondary">Paper trading platform</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="page-title">RSI Pullback Strategy</div>
+    </div>
+    <div class="page-content">
+      <!-- dummy rows -->
+      <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px 16px;margin-bottom:10px">
+        <div style="background:#21262d;height:10px;border-radius:4px;width:60%;margin-bottom:8px"></div>
+        <div style="background:#21262d;height:8px;border-radius:4px;width:40%"></div>
+      </div>
+      <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;height:200px"></div>
+    </div>
+
+    <!-- Demo bar -->
+    <div class="demo-bar">
+      <span class="demo-label">Step</span>
+      <button class="demo-btn active" onclick="showStep(1)">1 — Source</button>
+      <button class="demo-btn" onclick="showStep(2)">2 — CSV</button>
+      <button class="demo-btn" onclick="showStep(3)">3 — Queued</button>
+    </div>
+
+    <!-- Modal overlay -->
+    <div class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <div class="modal-title">Run Backtest</div>
+            <div class="modal-subtitle">RSI Pullback Strategy &nbsp;·&nbsp; v3 (latest)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="step-track" id="step-track">
+              <div class="step-pip active" id="pip-1"><div class="step-dot">1</div></div>
+              <div class="step-connector" id="conn-1"></div>
+              <div class="step-pip" id="pip-2"><div class="step-dot">2</div></div>
+              <div class="step-connector" id="conn-2"></div>
+              <div class="step-pip" id="pip-3"><div class="step-dot">3</div></div>
+            </div>
+            <button class="modal-close">&#215;</button>
+          </div>
+        </div>
+
+        <!-- Step 1: Data source -->
+        <div class="step-pane active" id="pane-1">
+          <div class="modal-body">
+            <div class="info-note">
+              <span class="info-icon">&#9432;</span>
+              Strategy parameters (symbols, start/end date, initial cash) are set inside your Python file. Only the data source needs to be selected here.
+            </div>
+            <div class="source-cards">
+              <div class="source-card selected" id="card-alpaca" onclick="selectSource('alpaca')">
+                <div class="radio-circle"><div class="radio-dot"></div></div>
+                <div class="source-info">
+                  <div class="source-title">Alpaca Historical Data</div>
+                  <div class="source-desc">Fetch OHLCV bars from Alpaca REST API for the symbols and date range defined in your strategy file.</div>
+                  <span class="source-tag">Default</span>
+                </div>
+              </div>
+              <div class="source-card" id="card-csv" onclick="selectSource('csv')">
+                <div class="radio-circle"><div class="radio-dot"></div></div>
+                <div class="source-info">
+                  <div class="source-title">Upload CSV File</div>
+                  <div class="source-desc">Provide your own OHLCV CSV file. Format: <code style="font-family:monospace;color:#8b949e">timestamp, open, high, low, close, volume</code></div>
+                  <span class="source-tag csv-tag">CSV</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost">Cancel</button>
+            <button class="btn btn-primary" id="step1-next" onclick="showStep(2, true)">Run Backtest</button>
+          </div>
+        </div>
+
+        <!-- Step 2: CSV upload -->
+        <div class="step-pane" id="pane-2">
+          <div class="modal-body">
+            <div class="dropzone">
+              <div class="dz-icon">&#128196;</div>
+              <div class="dz-title">Drop your CSV file here</div>
+              <div class="dz-sub">or <b>click to browse</b></div>
+              <div class="dz-constraint">.csv only &nbsp;·&nbsp; max 50 MB</div>
+            </div>
+            <div class="csv-format-hint">
+              <div class="csv-hint-label">Expected format</div>
+              <div class="csv-hint-code">
+                <span class="hl">timestamp</span>, open, high, low, close, volume<br>
+                2022-01-03T09:30:00Z, 478.32, 479.00, 477.90, 478.55, 82400<br>
+                2022-01-03T09:31:00Z, 478.55, 479.21, 478.30, 479.00, 71200
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="showStep(1)">&#8592; Back</button>
+            <button class="btn btn-primary" disabled>Run Backtest</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Queued -->
+        <div class="step-pane" id="pane-3">
+          <div class="modal-body">
+            <div class="success-block">
+              <div class="success-icon" style="color:#3fb950">&#10003;</div>
+              <div class="success-title">Backtest queued</div>
+              <div class="success-sub">Your job has been submitted and will start shortly.</div>
+              <div class="job-id-chip">
+                <span class="job-id-label">Job ID</span>
+                <span style="color:#c9d1d9">job_a4f7b2e1</span>
+              </div>
+              <br>
+              <a class="view-link" onclick="showStep(1)">
+                View job status &#8594;
+              </a>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="showStep(1)">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedSource = 'alpaca';
+
+    function selectSource(src) {
+      selectedSource = src;
+      document.getElementById('card-alpaca').classList.toggle('selected', src === 'alpaca');
+      document.getElementById('card-csv').classList.toggle('selected', src === 'csv');
+      document.getElementById('step1-next').textContent = src === 'csv' ? 'Next →' : 'Run Backtest';
+    }
+
+    function showStep(n, fromBtn) {
+      if (n === 2 && selectedSource === 'alpaca' && fromBtn) { showStep(3); return; }
+
+      document.querySelectorAll('.step-pane').forEach(p => p.classList.remove('active'));
+      document.getElementById('pane-' + n).classList.add('active');
+
+      document.querySelectorAll('.demo-btn').forEach((b,i) => b.classList.toggle('active', i+1===n));
+
+      [1,2,3].forEach(i => {
+        const pip = document.getElementById('pip-' + i);
+        pip.classList.remove('active','done');
+        if (i < n) pip.classList.add('done');
+        else if (i === n) pip.classList.add('active');
+        if (i < 3) {
+          const conn = document.getElementById('conn-' + i);
+          conn.classList.toggle('done', i < n);
+        }
+      });
+    }
+  </script>
+</body>
+</html>

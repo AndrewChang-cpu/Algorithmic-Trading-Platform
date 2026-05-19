@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATP — Login / Register</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .demo-bar {
+      position: fixed; top: 12px; right: 12px; z-index: 100;
+      display: flex; align-items: center; gap: 6px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 6px 10px;
+    }
+    .demo-label { font-size: 10px; color: #6e7681; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; margin-right: 4px; }
+    .demo-btn {
+      padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 500;
+      cursor: pointer; border: 1px solid #30363d; background: transparent; color: #8b949e;
+      font-family: inherit; transition: all 0.1s;
+    }
+    .demo-btn:hover { background: #21262d; color: #c9d1d9; }
+    .demo-btn.active { background: rgba(56,139,253,0.12); border-color: rgba(56,139,253,0.3); color: #388bfd; }
+
+    .page-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      width: 100%; padding: 40px 16px;
+    }
+    .logo-block {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 28px;
+    }
+    .logo-mark {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; color: #fff; letter-spacing: -0.5px;
+    }
+    .logo-name { font-size: 16px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+    .logo-sub { font-size: 11px; color: #6e7681; margin-top: 1px; }
+
+    .card {
+      width: 100%; max-width: 380px;
+      background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+      overflow: hidden;
+    }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid #21262d;
+    }
+    .tab {
+      flex: 1; padding: 12px 16px; text-align: center;
+      font-size: 13px; font-weight: 600; color: #6e7681;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: all 0.12s; margin-bottom: -1px;
+    }
+    .tab:hover { color: #c9d1d9; }
+    .tab.active { color: #e6edf3; border-bottom-color: #388bfd; }
+
+    .form-body { padding: 22px 20px 20px; }
+    .form-field { margin-bottom: 14px; }
+    .form-label {
+      display: block; font-size: 11px; font-weight: 600; color: #6e7681;
+      text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+      padding: 8px 11px; color: #c9d1d9; font-size: 13px; outline: none;
+      font-family: inherit; transition: border-color 0.12s;
+    }
+    .form-input:focus { border-color: #388bfd; box-shadow: 0 0 0 3px rgba(56,139,253,0.08); }
+    .form-input::placeholder { color: #484f58; }
+
+    .btn-primary {
+      width: 100%; padding: 9px; border-radius: 7px; border: none;
+      background: #1f6feb; color: #fff; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: inherit; transition: background 0.12s;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-primary:disabled { background: #21262d; color: #6e7681; cursor: not-allowed; }
+
+    .spinner {
+      width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      display: flex; align-items: flex-start; gap: 8px;
+      padding: 9px 11px; border-radius: 6px; margin-bottom: 14px;
+      background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.25);
+      color: #f85149; font-size: 12px; line-height: 1.4;
+    }
+    .error-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+
+    .divider { height: 1px; background: #21262d; margin: 18px 0; }
+
+    .form-footer {
+      text-align: center; font-size: 11px; color: #6e7681;
+    }
+    .form-footer a { color: #388bfd; text-decoration: none; }
+    .form-footer a:hover { text-decoration: underline; }
+
+    /* State toggling */
+    .state-login .show-register,
+    .state-register .show-login,
+    .state-loading .show-login,
+    .state-loading .show-register { display: none; }
+
+    .state-loading .btn-primary { pointer-events: none; }
+    .state-error-login .error-banner { display: flex; }
+    .state-error-login .show-register { display: none; }
+
+    .error-banner { display: none; }
+  </style>
+</head>
+<body>
+  <div class="demo-bar">
+    <span class="demo-label">State</span>
+    <button class="demo-btn active" onclick="setState('login')">Login</button>
+    <button class="demo-btn" onclick="setState('register')">Register</button>
+    <button class="demo-btn" onclick="setState('loading')">Loading</button>
+    <button class="demo-btn" onclick="setState('error')">Error</button>
+  </div>
+
+  <div class="page-wrap">
+    <div class="logo-block">
+      <div class="logo-mark">AT</div>
+      <div>
+        <div class="logo-name">Algorithmic Trading</div>
+        <div class="logo-sub">Paper trading & backtesting platform</div>
+      </div>
+    </div>
+
+    <div class="card" id="card">
+      <div class="tab-bar">
+        <div class="tab active show-login" onclick="setState('login')">Sign in</div>
+        <div class="tab show-register" onclick="setState('register')">Create account</div>
+        <div class="tab active show-login state-register-only" style="display:none" onclick="setState('login')">Sign in</div>
+      </div>
+
+      <div class="form-body">
+        <div class="error-banner" id="error-banner">
+          <span class="error-icon">&#9888;</span>
+          <span id="error-text">Invalid email or password.</span>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">Email address</label>
+          <input class="form-input" type="email" placeholder="you@example.com" id="email-input">
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">Password</label>
+          <input class="form-input" type="password" placeholder="Minimum 8 characters" id="pass-input">
+        </div>
+
+        <div class="form-field show-register" id="name-field" style="display:none">
+          <label class="form-label">Confirm password</label>
+          <input class="form-input" type="password" placeholder="Re-enter password">
+        </div>
+
+        <button class="btn-primary" id="submit-btn">
+          <span id="btn-spinner" class="spinner" style="display:none"></span>
+          <span id="btn-text">Sign in</span>
+        </button>
+
+        <div class="form-footer" style="margin-top:14px" id="footer-login">
+          Don't have an account? <a href="#" onclick="setState('register')">Create one</a>
+        </div>
+        <div class="form-footer" style="margin-top:14px;display:none" id="footer-register">
+          Already have an account? <a href="#" onclick="setState('login')">Sign in</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function setState(state) {
+      document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('active'));
+      const tabs = document.querySelectorAll('.tab');
+      const card = document.getElementById('card');
+
+      document.getElementById('error-banner').style.display = 'none';
+      document.getElementById('btn-spinner').style.display = 'none';
+      document.getElementById('name-field').style.display = 'none';
+      document.getElementById('footer-login').style.display = 'block';
+      document.getElementById('footer-register').style.display = 'none';
+      document.getElementById('submit-btn').disabled = false;
+
+      if (state === 'login') {
+        document.querySelector('.demo-btn:nth-child(2)').classList.add('active');
+        tabs[0].classList.add('active'); tabs[1].classList.remove('active');
+        document.getElementById('btn-text').textContent = 'Sign in';
+      } else if (state === 'register') {
+        document.querySelector('.demo-btn:nth-child(3)').classList.add('active');
+        tabs[1].classList.add('active'); tabs[0].classList.remove('active');
+        document.getElementById('name-field').style.display = 'block';
+        document.getElementById('footer-login').style.display = 'none';
+        document.getElementById('footer-register').style.display = 'block';
+        document.getElementById('btn-text').textContent = 'Create account';
+      } else if (state === 'loading') {
+        document.querySelector('.demo-btn:nth-child(4)').classList.add('active');
+        document.getElementById('btn-spinner').style.display = 'block';
+        document.getElementById('btn-text').textContent = 'Signing in...';
+        document.getElementById('submit-btn').disabled = true;
+      } else if (state === 'error') {
+        document.querySelector('.demo-btn:nth-child(5)').classList.add('active');
+        tabs[0].classList.add('active'); tabs[1].classList.remove('active');
+        document.getElementById('error-banner').style.display = 'flex';
+        document.getElementById('btn-text').textContent = 'Sign in';
+      }
+    }
+  </script>
+</body>
+</html>
