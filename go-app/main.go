@@ -1,147 +1,128 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
+	"application-server/db"
+	"application-server/handlers"
+	"application-server/middleware"
+	"application-server/queue"
+	s3client "application-server/s3"
+
+	"github.com/joho/godotenv"
 )
 
-type TaskParams struct {
-	KafkaTopic  string  `json:"kafka_topic"`
-	KafkaGroup  string  `json:"kafka_group"`
-	KafkaServer string  `json:"kafka_server"`
-	Stake       int     `json:"stake"`
-	InitialCash float64 `json:"initial_cash"`
-	Commission  float64 `json:"commission"`
-	PlotResults bool    `json:"plot_results"`
-}
-
-var ctx = context.Background()
-
-// TaskData represents the data structure for the task with only the "stake" parameter
-type TaskData struct {
-	Stake int `json:"stake"`
-}
-
-// Initialize Redis client
-func initRedisClient() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		// Addr:     "redis:6379",
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-	})
-
-	_, err := client.Ping(ctx).Result()
-	if err != nil {
-		log.Fatalf("Could not connect to Redis: %v", err)
-	}
-	return client
-}
-
-func handlePublishTask(w http.ResponseWriter, r *http.Request, redisClient *redis.Client) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse the JSON request body
-	var params TaskParams
-	err := json.NewDecoder(r.Body).Decode(&params)
-	if err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	// Create the task message
-	taskData := ConstructMessage(params)
-
-	// Publish to the Redis queue
-	err = redisClient.RPush(ctx, "celery", taskData).Err()
-	if err != nil {
-		http.Error(w, "Failed to publish task", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println("Task successfully published")
-	w.WriteHeader(http.StatusAccepted)
-}
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for testing
-	},
-}
-
-func handlePortfolioWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("Failed to upgrade connection: %v", err)
-		return
-	}
-	defer conn.Close()
-
-	// Create Kafka consumer
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
-		// "bootstrap.servers": "kafka:9092",
-		"bootstrap.servers": "localhost:9092",
-		"group.id":          "portfolio-websocket-consumer" + uuid.NewString(),
-		"auto.offset.reset": "earliest",
-	})
-	if err != nil {
-		log.Printf("Failed to create consumer: %v", err)
-		return
-	}
-	defer consumer.Close()
-
-	// Subscribe to portfolio_data topic
-	err = consumer.Subscribe("portfolio_data", nil)
-	if err != nil {
-		log.Printf("Failed to subscribe to topic: %v", err)
-		return
-	}
-
-	// Continue reading messages until connection is closed
-	for {
-		msg, err := consumer.ReadMessage(-1)
-		if err != nil {
-			log.Printf("Error reading message: %v", err)
-			break
-		}
-
-		// Forward message to WebSocket
-		if err := conn.WriteMessage(websocket.TextMessage, msg.Value); err != nil {
-			log.Printf("Error writing message: %v", err)
-			break
+func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
+	origins := map[string]bool{}
+	for _, o := range strings.Split(allowedOrigins, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins[o] = true
 		}
 	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if allowedOrigins == "" || origins[origin] || len(origins) == 0 {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// withAuth wraps a handler with JWT authentication.
+func withAuth(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		middleware.RequireAuth(h).ServeHTTP(w, r)
+	})
 }
 
 func main() {
-	redisClient := initRedisClient()
-	defer redisClient.Close()
+	// Load .env for local dev (no-op if missing)
+	_ = godotenv.Load()
 
-	http.HandleFunc("/publish_task", func(w http.ResponseWriter, r *http.Request) {
-		handlePublishTask(w, r, redisClient)
-	})
-	http.HandleFunc("/portfolio_stream", handlePortfolioWebSocket)
+	// JWT keys
+	privKey := os.Getenv("JWT_PRIVATE_KEY_PATH")
+	pubKey := os.Getenv("JWT_PUBLIC_KEY_PATH")
+	if privKey == "" {
+		privKey = "./jwt_private.pem"
+	}
+	if pubKey == "" {
+		pubKey = "./jwt_public.pem"
+	}
+	if err := middleware.LoadKeys(privKey, pubKey); err != nil {
+		log.Fatalf("loading JWT keys: %v", err)
+	}
 
-	// REMOVE IN PROD
-	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Connection successful"))
-	})
+	// Database
+	if err := db.Init(os.Getenv("DATABASE_URL")); err != nil {
+		log.Fatalf("connecting to database: %v", err)
+	}
 
-	fmt.Println("Go server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// S3 / MinIO
+	if err := s3client.Init(
+		os.Getenv("S3_ENDPOINT"),
+		os.Getenv("S3_ACCESS_KEY"),
+		os.Getenv("S3_SECRET_KEY"),
+		os.Getenv("S3_BUCKET"),
+		os.Getenv("S3_REGION"),
+	); err != nil {
+		log.Fatalf("initializing S3: %v", err)
+	}
+
+	// Redis / Celery queue
+	if err := queue.Init(os.Getenv("REDIS_URL")); err != nil {
+		log.Fatalf("connecting to Redis: %v", err)
+	}
+
+	mux := http.NewServeMux()
+
+	// Public auth routes
+	mux.HandleFunc("POST /api/auth/register", handlers.Register)
+	mux.HandleFunc("POST /api/auth/login", handlers.Login)
+	mux.HandleFunc("POST /api/auth/refresh", handlers.Refresh)
+	mux.HandleFunc("POST /api/auth/logout", handlers.Logout)
+
+	// Health check (public)
+	mux.HandleFunc("GET /api/health", handlers.HealthCheck)
+
+	// Strategies (protected)
+	mux.HandleFunc("GET /api/strategies", withAuth(handlers.ListStrategies))
+	mux.HandleFunc("POST /api/strategies", withAuth(handlers.UploadStrategy))
+	mux.HandleFunc("GET /api/strategies/{id}", withAuth(handlers.GetStrategy))
+	mux.HandleFunc("POST /api/strategies/{id}/versions", withAuth(handlers.UploadNewVersion))
+	mux.HandleFunc("GET /api/strategies/{id}/versions/{versionId}/code", withAuth(handlers.GetVersionCode))
+	mux.HandleFunc("DELETE /api/strategies/{id}", withAuth(handlers.DeleteStrategy))
+
+	// Jobs (protected)
+	mux.HandleFunc("GET /api/jobs", withAuth(handlers.ListJobs))
+	mux.HandleFunc("POST /api/jobs", withAuth(handlers.SubmitJob))
+	mux.HandleFunc("GET /api/jobs/{id}", withAuth(handlers.GetJob))
+	mux.HandleFunc("GET /api/jobs/{id}/metrics", withAuth(handlers.GetJobMetrics))
+	mux.HandleFunc("GET /api/jobs/{id}/portfolio", withAuth(handlers.GetPortfolio))
+	mux.HandleFunc("POST /api/jobs/{id}/cancel", withAuth(handlers.CancelJob))
+
+	// WebSocket streams (auth via ?token= query param, handled inside handler)
+	mux.HandleFunc("GET /api/stream/jobs/{id}", handlers.JobStatusStream)
+	mux.HandleFunc("GET /api/stream/portfolio/{jobId}", handlers.PortfolioStream)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	cors := corsMiddleware(os.Getenv("CORS_ORIGINS"))
+	log.Printf("go-app listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
 }

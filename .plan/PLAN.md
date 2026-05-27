@@ -40,9 +40,17 @@ Existing assets to preserve:
 - [ ] No secrets committed — Sealed Secrets or env vars used everywhere
 - [ ] Database migrations apply cleanly via golang-migrate
 - [ ] Kubernetes manifests updated, ArgoCD sync verified after deploy
-- [ ] Unit tests for: AST scanner, results parser, JWT middleware, API handlers
-- [ ] Integration tests for: full backtest pipeline, auth flow, job queue
-- [ ] E2E tests for: register → upload → run backtest → view results; go live → see updates → stop
+### Unit tests (already passing)
+- [ ] `python3 -m pytest python/test_strategy_validator.py python/test_data_materializer.py python/test_results_parser.py -v` — 19 tests pass
+- [ ] `/usr/local/go/bin/go test ./go-app/middleware/... ./go-app/handlers/...` — all tests pass (uses real Postgres via testcontainers, miniredis, fake S3)
+- [ ] `python3 -m pytest python/test_lean_runner.py -v` — all lean_runner unit tests pass (subprocess mocked; covers success, TimeoutError, non-zero exit, poll_live_results)
+
+### Integration tests
+- [ ] `python3 -m pytest python/test_celery_worker.py -v` — celery_worker integration tests pass: job row transitions `queued→running→completed`; `performance_metrics` row inserted; `portfolio_metrics` rows inserted; LEAN timeout → `failed` + `error_message` set; invalid strategy (blocked import in DB'd code) → `failed`
+- [ ] `/usr/local/go/bin/go test ./go-data/...` — historical endpoint tests pass: `POST /data/historical` inserts correct bar count in `market_data`; second identical request returns same `bars_ready` without hitting Alpaca again (dedup verified by mock call count)
+
+### E2E tests (Playwright + MSW)
+- [ ] `cd web && npx playwright test` — all spec files pass: register→login→redirect to `/overview`; wrong password shows inline 401 error; upload valid strategy→success step shown; upload `import os` strategy→violation message shown; open Run Backtest modal→submit→"Job queued" confirmation + jobId displayed; queued job appears in `/backtests` list with correct status badge
 
 ## Out of Scope
 - Real broker order execution (Alpaca is data-only in this project)

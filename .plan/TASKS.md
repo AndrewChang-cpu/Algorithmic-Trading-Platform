@@ -1,7 +1,7 @@
 # Tasks: Algorithmic Trading Platform
-> Generated: 2026-05-19
+> Generated: 2026-05-19 (testing tasks added 2026-05-20)
 > Source: .plan/
-> Total: 27 tasks | Starting points: 9
+> Total: 31 tasks | Starting points: 9
 
 ## Dependency Graph
 
@@ -10,6 +10,7 @@ T-01 · local-docker-compose.yml
 
 T-02 · DB migrations
 └── T-10 · go-data extension
+    └── T-30 · go-data handler tests
 
 T-03 · KafkaDataQueueHandler.cs
 └── T-04 · lean-plugin Dockerfile
@@ -20,6 +21,8 @@ T-05 · strategy_validator.py
 T-06 · data_materializer.py
 T-07 · results_parser.py
 T-08 · lean_runner.py
+└── T-28 · lean_runner unit tests
+    └── T-29** · celery_worker integration tests
 
 T-11 · go-app models
 └── T-12 · JWT middleware
@@ -39,14 +42,19 @@ T-18 · Web foundation
 │       │   └── T-27* · Live + Overview
 │       └── T-26** · Results page
 └── T-20 · Real-time WebSocket hooks
+
+T-19, T-22, T-24, T-25 · Web pages
+└── T-31*** · Playwright E2E tests
 ```
 
 ```
-* T-09  also depends on T-06, T-07, T-08
-* T-17  also depends on T-13, T-14, T-15, T-16
-* T-25  also depends on T-24
-* T-26  also depends on T-25, T-20
-* T-27  also depends on T-24, T-20
+*   T-09  also depends on T-06, T-07, T-08
+*   T-17  also depends on T-13, T-14, T-15, T-16
+*   T-25  also depends on T-24
+*   T-26  also depends on T-25, T-20
+*   T-27  also depends on T-24, T-20
+**  T-29  also depends on T-09 (celery_worker.py must exist)
+*** T-31  also depends on T-26, T-27, T-20
 ```
 
 ---
@@ -54,7 +62,7 @@ T-18 · Web foundation
 ## Tasks
 
 ### T-01 · Local docker-compose (KRaft + TimescaleDB + MinIO)
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] local-docker-compose.yml`
 **What:** Replace `local-kafka-docker-compose.yml` (which uses Zookeeper) with a new `local-docker-compose.yml` that runs four services:
@@ -69,7 +77,7 @@ All services on a shared `atp-local` bridge network.
 ---
 
 ### T-02 · Database migrations
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] migrations/001_create_users.up.sql`, `[new] migrations/001_create_users.down.sql`, `[new] migrations/002_create_strategies.up.sql`, `[new] migrations/002_create_strategies.down.sql`, `[new] migrations/003_create_strategy_versions.up.sql`, `[new] migrations/003_create_strategy_versions.down.sql`, `[new] migrations/004_create_jobs.up.sql`, `[new] migrations/004_create_jobs.down.sql`, `[new] migrations/005_create_job_logs.up.sql`, `[new] migrations/005_create_job_logs.down.sql`, `[new] migrations/006_create_performance_metrics.up.sql`, `[new] migrations/006_create_performance_metrics.down.sql`, `[new] migrations/007_create_portfolio_metrics.up.sql`, `[new] migrations/007_create_portfolio_metrics.down.sql`, `[new] migrations/008_create_market_data.up.sql`, `[new] migrations/008_create_market_data.down.sql`, `[new] migrations/009_create_refresh_tokens.up.sql`, `[new] migrations/009_create_refresh_tokens.down.sql`
 **What:** Write SQL migration files for all 9 tables exactly as specified in SYSTEM-DESIGN.md. Key points:
@@ -89,7 +97,7 @@ Each `.down.sql` drops the table (CASCADE where needed).
 ---
 
 ### T-03 · KafkaDataQueueHandler C# plugin
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] lean-plugin/KafkaDataQueueHandler.cs`, `[new] lean-plugin/KafkaDataQueueHandler.csproj`
 **What:** Implement a C# .NET 6 class `KafkaDataQueueHandler` that implements LEAN's `IDataQueueHandler` interface. Read `kafka-bootstrap-servers` and `job-id` from LEAN's config dict.
@@ -107,7 +115,7 @@ Responsibilities:
 ---
 
 ### T-04 · lean-atp Docker image
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-03
 **Files:** `[new] lean-plugin/Dockerfile`
 **What:** Multi-stage Dockerfile that builds `lean-atp:latest`:
@@ -125,7 +133,7 @@ Set `ENTRYPOINT ["dotnet", "QuantConnect.Lean.Launcher.dll"]`
 ---
 
 ### T-05 · strategy_validator.py
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] python/strategy_validator.py`, `[new] python/test_strategy_validator.py`
 **What:** Implement `validate_strategy(source_code: str) -> dict` in `python/strategy_validator.py`:
@@ -146,7 +154,7 @@ Write `python/test_strategy_validator.py` with pytest tests covering:
 ---
 
 ### T-06 · data_materializer.py
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] python/data_materializer.py`, `[new] python/test_data_materializer.py`
 **What:** Implement `materialize_lean_csv(rows: list[dict], output_dir: str, symbol: str, resolution: str)` in `python/data_materializer.py`.
@@ -170,7 +178,7 @@ Write `python/test_data_materializer.py` with pytest tests:
 ---
 
 ### T-07 · results_parser.py
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] python/results_parser.py`, `[new] python/test_results_parser.py`
 **What:** Implement two functions in `python/results_parser.py`:
@@ -187,7 +195,7 @@ Write `python/test_results_parser.py` using the actual sample JSON structure fro
 ---
 
 ### T-08 · lean_runner.py
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] python/lean_runner.py`
 **What:** Implement Docker container lifecycle functions in `python/lean_runner.py`:
@@ -216,7 +224,7 @@ All Docker calls use `subprocess.run` or `subprocess.Popen`. `LEAN_IMAGE` read f
 ---
 
 ### T-09 · celery_worker.py + python/Dockerfile
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-05, T-06, T-07, T-08
 **Files:** `python/celery_worker.py`, `python/Dockerfile`, `python/requirements.txt`
 **What:** Rewrite `python/celery_worker.py`. Delete `python/strategy.py` and `python/consumer_test.py`.
@@ -256,7 +264,7 @@ All log output to `/logs/celery.log` and `/logs/lean_runner.log`.
 ---
 
 ### T-10 · go-data: HTTP historical endpoint + TimescaleDB writes
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-02
 **Files:** `go-data/main.go`, `go-data/go.mod`
 **What:** Extend `go-data/main.go`. Keep the existing Alpaca WebSocket → Kafka producer loop. Add:
@@ -282,7 +290,7 @@ All log output to `/logs/celery.log` and `/logs/lean_runner.log`.
 ---
 
 ### T-11 · go-app/models/models.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `[new] go-app/models/models.go`, `go-app/go.mod`
 **What:** Write `go-app/models/models.go` with Go structs for all DB entities and API request/response types. Add required dependencies to `go.mod`.
@@ -303,7 +311,7 @@ Add to `go.mod`: `github.com/gorilla/mux`, `github.com/golang-jwt/jwt/v5`, `gola
 ---
 
 ### T-12 · go-app/middleware/jwt.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-11
 **Files:** `[new] go-app/middleware/jwt.go`, `[new] go-app/middleware/jwt_test.go`
 **What:** Implement RS256 JWT middleware in `go-app/middleware/jwt.go`:
@@ -330,7 +338,7 @@ Write `go-app/middleware/jwt_test.go`:
 ---
 
 ### T-13 · go-app/handlers/auth.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-11, T-12
 **Files:** `[new] go-app/handlers/auth.go`, `[new] go-app/handlers/auth_test.go`, `[new] go-app/db/db.go`
 **What:** Create `go-app/db/db.go` with `InitDB(databaseURL string) (*pgxpool.Pool, error)` and a package-level pool. All handlers use this pool.
@@ -355,7 +363,7 @@ Write `go-app/handlers/auth_test.go` using `httptest` and a test DB or mock:
 ---
 
 ### T-14 · go-app/handlers/strategies.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-11, T-12
 **Files:** `[new] go-app/handlers/strategies.go`, `[new] go-app/handlers/strategies_test.go`, `[new] go-app/s3/s3.go`
 **What:** Create `go-app/s3/s3.go` with `InitS3(endpoint, accessKey, secretKey, bucket, region string)` using `aws-sdk-go-v2`. Supports MinIO via custom endpoint resolver.
@@ -385,7 +393,7 @@ Write `go-app/handlers/strategies_test.go`:
 ---
 
 ### T-15 · go-app/handlers/jobs.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-11, T-12
 **Files:** `[new] go-app/handlers/jobs.go`, `[new] go-app/handlers/jobs_test.go`, `[new] go-app/queue/queue.go`
 **What:** Create `go-app/queue/queue.go` with `InitRedis(url string) *redis.Client` and `EnqueueBacktest(jobID string) error` / `EnqueueLive(jobID string) error` that push Celery-format task messages to the `celery` Redis key (JSON with `task`, `id`, `args` fields matching Celery's protocol).
@@ -416,7 +424,7 @@ Write `go-app/handlers/jobs_test.go`:
 ---
 
 ### T-16 · go-app/handlers/stream.go
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-11, T-15
 **Files:** `[new] go-app/handlers/stream.go`
 **What:** Implement WebSocket handlers in `go-app/handlers/stream.go`:
@@ -431,7 +439,7 @@ Use `gorilla/websocket` upgrader with `CheckOrigin` reading allowed origins from
 ---
 
 ### T-17 · go-app/main.go rewrite
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-12, T-13, T-14, T-15, T-16
 **Files:** `go-app/main.go`, `go-app/Dockerfile`
 **What:** Rewrite `go-app/main.go` as the application entry point:
@@ -469,7 +477,7 @@ Update `go-app/Dockerfile`: `FROM golang:1.23-alpine AS build`, `go build -o /ap
 ---
 
 ### T-18 · Web frontend foundation
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** none
 **Files:** `web/package.json`, `[new] web/src/lib/api.ts`, `[new] web/src/lib/store.ts`, `[new] web/src/hooks/useAuth.ts`
 **What:** Update `web/package.json` to add dependencies: `react-router-dom@6`, `@tanstack/react-query@5`, `zustand@4`, `lightweight-charts@4`, `axios`. Remove any conflicting defaults from the Vite scaffold.
@@ -484,7 +492,7 @@ Update `go-app/Dockerfile`: `FROM golang:1.23-alpine AS build`, `go build -o /ap
 ---
 
 ### T-19 · Login and Register pages
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-18
 **Files:** `[new] web/src/pages/Login.tsx`, `[new] web/src/pages/Register.tsx`
 **What:** `Login.tsx`: full-page centered card (no sidebar). Email + password inputs. Submit button (full width, primary, shows spinner while loading). Error message inline below form on 401. On success: call `useLogin()`, redirect to `/overview`. Link to `/register` below the form.
@@ -497,7 +505,7 @@ Both pages: inputs disabled during submission. Match design system from UI-SPEC.
 ---
 
 ### T-20 · Real-time WebSocket hooks
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-18
 **Files:** `[new] web/src/hooks/useJobStatus.ts`, `[new] web/src/hooks/usePortfolio.ts`
 **What:** `useJobStatus(jobId: string | null)`: opens WebSocket to `ws://localhost:8080/api/stream/jobs/{jobId}?token={accessToken}`. Parses incoming JSON messages. Returns `{ status: string, logs: LogEntry[] }`. Reconnects on close (unless jobId is null). Tears down on unmount.
@@ -510,7 +518,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-21 · App.tsx routing + Layout components
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-19
 **Files:** `web/src/App.tsx`, `[new] web/src/components/layout/Sidebar.tsx`, `[new] web/src/components/layout/Topbar.tsx`
 **What:** Rewrite `web/src/App.tsx` with React Router v6 `<BrowserRouter>`. Define a `<PrivateRoute>` wrapper that reads `accessToken` from Zustand store and redirects to `/login` if null. Routes:
@@ -529,7 +537,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-22 · Strategies page + Upload modal
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-21
 **Files:** `[new] web/src/pages/Strategies.tsx`, `[new] web/src/components/strategy/UploadModal.tsx`
 **What:** `Strategies.tsx`: uses React Query to fetch `GET /api/strategies`. Shows a table of strategies: name, latest version badge (`v3`), last run P&L, validation status, action buttons (Run Backtest, View, Delete). Empty state: centered card "No strategies yet. Upload your first strategy." with upload button. "+ Upload Strategy" button in Topbar action area opens `<UploadModal>`. Delete action: `window.confirm()` → `DELETE /api/strategies/:id` → invalidate query.
@@ -540,7 +548,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-23 · Strategy detail page
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-22
 **Files:** `[new] web/src/pages/StrategyDetail.tsx`, `[new] web/src/components/strategy/CodeViewer.tsx`, `[new] web/src/components/strategy/VersionSelector.tsx`
 **What:** `StrategyDetail.tsx`: fetches `GET /api/strategies/:id`. Shows aggregate stats bar (total runs, best Sharpe, best return, avg return). Two tabs: Code and Runs. Header: strategy name, version badge, "Upload New Version" button (opens UploadModal in update mode), "Delete Strategy" button (danger, confirms before delete).
@@ -555,7 +563,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-24 · Job modals + job components
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-21
 **Files:** `[new] web/src/components/jobs/RunBacktestModal.tsx`, `[new] web/src/components/jobs/GoLiveModal.tsx`, `[new] web/src/components/jobs/StatusBadge.tsx`, `[new] web/src/components/jobs/JobCard.tsx`
 **What:** `RunBacktestModal.tsx`: Step 1 — fields: Symbols (text input, placeholder "SPY, QQQ"), Start Date (date picker input), End Date (date picker input), Resolution (select: Daily/Hourly/Minute), Data Source radio cards (Alpaca default, CSV Upload). Validate all fields on submit; start date must be before end date. If CSV selected, Step 2 shows dropzone for `.csv` file (max 50MB). Calls `POST /api/jobs` on submit. Step 3: "Job queued. Job ID: abc123. View job status →" link to `/results/:jobId`. Close button on each step.
@@ -570,7 +578,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-25 · Backtests list page
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-21, T-24
 **Files:** `[new] web/src/pages/Backtests.tsx`
 **What:** `Backtests.tsx`: uses React Query to fetch `GET /api/jobs?type=backtest` (paginated, 20 per page). Shows filter bar with status buttons: All / Queued / Running / Completed / Failed. Renders a list of `<JobCard>` variants (table row style): strategy name, version, status badge, data source, date created, net P&L (if completed), Sharpe (if completed). Clicking a row navigates to `/results/:jobId`. Empty state: "No backtests yet. Select a strategy and run your first backtest." Pagination controls at bottom. Loading state: skeleton rows.
@@ -579,7 +587,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-26 · Results page + chart components
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-25, T-20
 **Files:** `[new] web/src/pages/Results.tsx`, `[new] web/src/components/results/EquityCurve.tsx`, `[new] web/src/components/results/HeroMetrics.tsx`, `[new] web/src/components/results/MetricsTabs.tsx`, `[new] web/src/components/results/LogStream.tsx`
 **What:** `EquityCurve.tsx`: renders Lightweight Charts `CandlestickSeries` using data from `GET /api/jobs/:id/portfolio`. Chart background `#0d1117`, grid lines `#21262d`, up candles `#3fb950`, down candles `#f85149`. Auto-fits content. While job is running, subscribes to `useJobStatus` snapshot updates to append new candles in real time.
@@ -599,7 +607,7 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 ---
 
 ### T-27 · Overview + Live trading monitor pages
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** T-21, T-24, T-20
 **Files:** `[new] web/src/pages/Overview.tsx`, `[new] web/src/pages/Live.tsx`
 **What:** `Overview.tsx`: system health bar showing Kafka / Redis / PostgreSQL status indicators (green/warn/down) — poll `GET /api/health` every 30s (add this endpoint to go-app: returns 200 with `{kafka: "ok"|"down", redis: "ok"|"down", db: "ok"|"down"}`). Summary cards: Active Jobs (links to `/backtests?status=running`), Total Strategies, Total Backtests. Recent jobs table (last 10): strategy name, type badge, status badge, created date — rows link to results or live.
@@ -612,6 +620,100 @@ Both hooks: get `accessToken` from Zustand store. Only connect when `jobId` is n
 
 ---
 
+### T-28 · lean_runner.py unit tests
+**Status:** `done`
+**Depends on:** T-08
+**Files:** `[new] python/test_lean_runner.py`
+**What:** Write unit tests for `python/lean_runner.py` using `unittest.mock.patch` to mock `subprocess.run` and `subprocess.Popen`. Tests must cover:
+- `run_lean_backtest` success: mock returns exit code 0, results JSON file exists → function returns path to results JSON
+- `run_lean_backtest` timeout: mock raises `subprocess.TimeoutExpired` → function raises `TimeoutError`
+- `run_lean_backtest` non-zero exit: mock returns exit code 1 → function raises `RuntimeError`
+- `run_lean_live`: mock returns stdout with container ID → function returns that container ID string
+- `stop_lean_live`: verifies `docker stop {container_id}` is called; mock returns exit code 0
+- `poll_live_results`: returns `None` when results directory is empty; returns parsed dict when results JSON file exists (create a temp file in `tmp_path`)
+
+Use `pytest` + `tmp_path` fixture for file system operations. Set `LEAN_IMAGE=lean-atp:latest` in test env.
+**Done when:** `python3 -m pytest python/test_lean_runner.py -v` passes all tests with no live Docker calls
+
+---
+
+### T-29 · celery_worker.py integration tests
+**Status:** `done`
+**Depends on:** T-08, T-09, T-28
+**Files:** `[new] python/test_celery_worker.py`
+**What:** Write integration tests for the `run_lean_backtest` Celery task function (call the function directly — do not go through a Celery broker). Use real infrastructure via `testcontainers`:
+- PostgreSQL: `testcontainers.postgres.PostgresContainer("postgres:16-alpine")` — apply migrations 001–007, 009 (skip 008 which needs TimescaleDB extension; replace `portfolio_metrics` write with a plain table or mock that INSERT)
+- MinIO: `testcontainers.minio.MinioContainer("minio/minio")` — or use `moto` to mock S3
+
+Mock the following at the boundary:
+- `lean_runner.run_lean_backtest` → writes a minimal LEAN results JSON to `job_dir/Results/result.json` and returns that path
+- `requests.post` (the `POST /data/historical` call to go-data) → returns `Mock(status_code=200, json=lambda: {"bars_ready": 3})`
+
+Seed data before each test: INSERT a `users` row, `strategies` row, `strategy_versions` row (with `s3_key` pointing to a MinIO object containing `validStrategy`), and a `jobs` row (status=`queued`).
+
+Tests:
+- **Happy path**: call `run_lean_backtest(job_id)` → job status = `completed`; `performance_metrics` row exists with `sharpe_ratio` populated; at least 1 `portfolio_metrics` row exists
+- **Strategy validation failure** (seed a strategy version whose S3 object contains `import os`): job status = `failed`; `error_message` contains `"import"` or `"os"`
+- **LEAN timeout**: `lean_runner.run_lean_backtest` raises `TimeoutError` → job status = `failed`; `error_message` contains `"timeout"`
+- **LEAN RuntimeError**: `lean_runner.run_lean_backtest` raises `RuntimeError("container exited 1")` → job status = `failed`; `error_message` non-empty
+
+The minimal LEAN results JSON fixture must include `totalPerformance.portfolioStatistics` (with `SharpeRatio`, `TotalReturn`, `Drawdown` keys) and `charts.Strategy Equity.series.Equity.values` (at least 3 `[ts, o, h, l, c]` entries).
+**Done when:** `python3 -m pytest python/test_celery_worker.py -v` passes all 4 tests; Docker must be running (testcontainers requires it)
+
+---
+
+### T-30 · go-data historical endpoint tests
+**Status:** `done`
+**Depends on:** T-10
+**Files:** `[new] go-data/historical_test.go`
+**What:** Write Go tests for the `POST /data/historical` HTTP handler in `go-data/main.go`. Use:
+- `testcontainers-go` PostgreSQL container (`postgres:16-alpine`) — apply migration `008_create_market_data.up.sql` only (no TimescaleDB; replace `create_hypertable` call in migration with a no-op or strip it in test setup; market_data is a plain table without hypertable for tests)
+- `httptest.NewServer` as a mock Alpaca API: returns a fixed JSON payload with 4 daily bars for SPY
+
+Tests:
+- **Fetch and insert**: `POST /data/historical {"symbols":["SPY"],"start_date":"2024-01-02","end_date":"2024-01-05","resolution":"1d"}` → response `{"bars_ready":4}`; `SELECT COUNT(*) FROM market_data WHERE symbol='SPY'` = 4
+- **Deduplication**: second identical `POST /data/historical` → same `{"bars_ready":4}`; mock Alpaca server receives exactly 1 total request (not 2) — verify via request counter in the mock server; `SELECT COUNT(*) FROM market_data WHERE symbol='SPY'` still = 4
+- **Invalid body**: `POST /data/historical {}` (missing required fields) → `400`
+
+Set `DATABASE_URL`, `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, and point `ALPACA_BASE_URL` (or equivalent constant) to the mock httptest server URL.
+**Done when:** `/usr/local/go/bin/go test ./go-data/...` passes all 3 tests
+
+---
+
+### T-31 · Playwright E2E tests
+**Status:** `done`
+**Depends on:** T-19, T-22, T-24, T-25, T-26
+**Files:** `[new] web/e2e/auth.spec.ts`, `[new] web/e2e/strategies.spec.ts`, `[new] web/e2e/backtest.spec.ts`, `[new] web/playwright.config.ts`, `[new] web/e2e/msw-handlers.ts`
+**What:** Add Playwright + MSW (Mock Service Worker) for deterministic browser-level E2E tests. All API calls are intercepted by MSW — no live backend required.
+
+Install: `npm install -D @playwright/test msw` in `web/`. Add `"test:e2e": "playwright test"` to `web/package.json` scripts.
+
+`web/playwright.config.ts`: `baseURL: "http://localhost:5173"`, `webServer: { command: "npm run dev", port: 5173 }`, `testDir: "./e2e"`.
+
+`web/e2e/msw-handlers.ts`: define MSW request handlers for all API endpoints used in tests. Use `page.route()` (Playwright's native network interception) instead of a Service Worker to avoid extra setup complexity.
+
+`auth.spec.ts` — 4 tests:
+1. Visit `/login` unauthenticated → page shows email+password form
+2. Submit valid credentials (mock `POST /api/auth/login` → `200 {accessToken, refreshToken, userId}`) → redirected to `/overview`
+3. Submit wrong password (mock `POST /api/auth/login` → `401`) → inline error text visible on page
+4. Visit `/register`, submit (mock `POST /api/auth/register` → `201`) → redirected to `/overview`; submit duplicate email (mock `→ 409`) → "email already registered" error visible
+
+`strategies.spec.ts` — 3 tests:
+1. `/strategies` with empty list (mock `GET /api/strategies` → `[]`) → empty state text "No strategies yet" visible
+2. `/strategies` with one strategy (mock → `[{id, name, latestVersion:1}]`) → strategy name appears in table
+3. Open upload modal, select a `.py` file, enter name, submit (mock `POST /api/strategies` → `201 {strategyId, versionId, versionNumber:1}`) → success step shown with "Strategy uploaded (v1)" text; submit with mock → `422 {error:"import os detected on line 1"}` → error step shown with violation text
+
+`backtest.spec.ts` — 3 tests:
+1. `/backtests` empty (mock `GET /api/jobs?type=backtest` → `{jobs:[], total:0}`) → empty state visible
+2. Open Run Backtest modal from Strategies page (mock `GET /api/strategies` → 1 strategy), fill all fields (symbols="SPY", dates, resolution=Daily, source=Alpaca), submit (mock `POST /api/jobs` → `202 {jobId:"test-job-123"}`) → "Job queued. Job ID: test-job-123" confirmation visible
+3. `/backtests` with one queued job (mock → `{jobs:[{id:"test-job-123", status:"queued", ...}], total:1}`) → row visible with "queued" status badge
+
+Each test must: navigate to the page, assert the UI state, perform an action, assert the result — no `page.waitForTimeout()` calls (use `page.waitForSelector()` or `expect(locator).toBeVisible()`).
+**Done when:** `cd web && npm run test:e2e` passes all 10 tests; Playwright report shows no flaky tests on 3 consecutive runs
+
+---
+
 ## Open Questions
 - **Strategy validation bridge (Go vs Python):** SYSTEM-DESIGN.md places `strategy_validator.py` in Python, but go-app (Go) needs to scan at upload time synchronously. T-14 implements the scan inline in Go to avoid inter-service calls. `python/strategy_validator.py` (T-05) serves as a pre-execution double-check in Celery and for unit-tested reference behavior. If strict Python AST parity is required (e.g., Python-specific import aliasing), consider exposing a lightweight HTTP endpoint from the Python container — but this adds deployment complexity not warranted for MVP.
 - **Health endpoint:** T-27 references `GET /api/health`. This is a small addition to T-17 (go-app main.go). Implementer of T-27 should coordinate with T-17 implementer, or it can be added as a one-liner to T-17.
+- **T-30 TimescaleDB migration 008**: the `create_hypertable` call in `008_create_market_data.up.sql` requires the TimescaleDB extension and will fail against a plain Postgres container. The test helper must strip or skip this call when running against the test container (plain `CREATE TABLE` without hypertable is sufficient for unit testing the handler logic).

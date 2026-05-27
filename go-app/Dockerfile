@@ -1,32 +1,14 @@
-# Stage 1: Build the application
-FROM golang:1.23.2 AS builder
-
+FROM golang:1.23 AS build
 WORKDIR /app
-
-# - Download ownload dependencies first
 COPY go.mod go.sum ./
-
-# - Download and cache Go modules
 RUN go mod download
-
-# - Copy the rest of the application source code
 COPY . .
+RUN apt-get update && apt-get install -y librdkafka-dev
+RUN go build -o server .
 
-# Build the Go application
-RUN go build -o main .
-
-# Stage 2: Create a minimal runtime image
-FROM ubuntu:latest
-
-# Install CA certificates and necessary libraries for Kafka
-RUN apt-get update && apt-get install -y ca-certificates librdkafka1 && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /root/
-
-# Copy the compiled binary from the builder stage
-COPY --from=builder /app/main .
-
-# Expose the application port
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y librdkafka1 ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=build /app/server .
 EXPOSE 8080
-
-CMD ["./main"]
+CMD ["./server"]

@@ -1,12 +1,16 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
+
+# Install Docker CLI (needed by lean_runner.py to call docker run/stop)
+RUN apt-get update && apt-get install -y \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt /app/
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . /app/
 
-# Set the environment variable for Celery
-ENV CELERY_BROKER_URL=redis://redis-service:6379/0
+COPY *.py .
 
-# Command to run the Celery worker
-CMD ["celery", "-A", "celery_worker", "worker", "--loglevel=info"]
+RUN mkdir -p /logs
+
+CMD ["celery", "-A", "celery_worker", "worker", "--loglevel=info", "--logfile=/logs/celery.log"]
