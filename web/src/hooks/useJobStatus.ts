@@ -26,12 +26,8 @@ export function useJobStatus(jobId: string | null): JobStatusState {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
 
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
+  // Single cleanup effect — avoids the race where re-renders reset mountedRef to true
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   useEffect(() => {
     if (!jobId || !accessToken) return
@@ -41,12 +37,12 @@ export function useJobStatus(jobId: string | null): JobStatusState {
     function connect() {
       if (!mountedRef.current) return
 
-      const ws = new WebSocket(
-        `${WS_BASE}/api/stream/jobs/${jobId}?token=${encodeURIComponent(accessToken!)}`
-      )
+      const ws = new WebSocket(`${WS_BASE}/api/stream/jobs/${jobId}`)
       wsRef.current = ws
 
       ws.onopen = () => {
+        // First message: authenticate
+        ws.send(JSON.stringify({ type: 'auth', token: accessToken }))
         if (mountedRef.current) setState((s) => ({ ...s, connected: true }))
       }
 
@@ -54,6 +50,7 @@ export function useJobStatus(jobId: string | null): JobStatusState {
         if (!mountedRef.current) return
         try {
           const msg = JSON.parse(event.data as string)
+          if (msg.type === 'auth_ok') return
           if (msg.type === 'status') {
             setState((s) => ({ ...s, status: msg.status as string }))
             if (TERMINAL_STATUSES.has(msg.status as string)) {
@@ -90,7 +87,6 @@ export function useJobStatus(jobId: string | null): JobStatusState {
     connect()
 
     return () => {
-      mountedRef.current = false
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       wsRef.current?.close(1000, 'unmount')
     }

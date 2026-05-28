@@ -55,21 +55,41 @@ func fetchAndCacheBars(ctx context.Context, symbol, startDate, endDate, resoluti
 	apiSecret := os.Getenv("ALPACA_API_SECRET")
 	timeframe := alpacaTimeframe(resolution)
 
-	// Check existing coverage: count rows in market_data for this symbol/resolution/range
-	var existingCount int
-	err := db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM market_data WHERE symbol=$1 AND resolution=$2 AND time >= $3::date AND time <= $4::date`,
-		symbol, resolution, startDate, endDate,
-	).Scan(&existingCount)
+	// Parse requested date range for gap comparison.
+	parsedStart, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
-		return 0, fmt.Errorf("coverage check failed: %w", err)
+		return 0, fmt.Errorf("invalid start_date %q: %w", startDate, err)
+	}
+	parsedEnd, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return 0, fmt.Errorf("invalid end_date %q: %w", endDate, err)
 	}
 
-	if existingCount > 0 {
-		return existingCount, nil
+	// Gap-aware dedup: check whether cached data covers the full requested range.
+	var minTime, maxTime *time.Time
+	if gapErr := db.QueryRow(ctx,
+		`SELECT MIN(time), MAX(time) FROM market_data
+		 WHERE symbol=$1 AND resolution=$2
+		 AND time >= $3::timestamptz AND time <= $4::timestamptz`,
+		symbol, resolution, startDate, endDate,
+	).Scan(&minTime, &maxTime); gapErr != nil {
+		// Log but continue — if the check fails, fetch from Alpaca.
+		log.Printf("dedup check error: %v", gapErr)
 	}
 
-	// Fetch from Alpaca REST API
+	// Skip Alpaca only when cached data covers the full requested range.
+	if minTime != nil && maxTime != nil && !minTime.After(parsedStart) && !maxTime.Before(parsedEnd) {
+		var cachedCount int
+		if err := db.QueryRow(ctx,
+			`SELECT COUNT(*) FROM market_data WHERE symbol=$1 AND resolution=$2 AND time >= $3::date AND time <= $4::date`,
+			symbol, resolution, startDate, endDate,
+		).Scan(&cachedCount); err != nil {
+			return 0, fmt.Errorf("cached count query failed: %w", err)
+		}
+		return cachedCount, nil
+	}
+
+	// Fetch from Alpaca REST API.
 	apiURL := fmt.Sprintf(
 		"%s/v2/stocks/%s/bars?timeframe=%s&start=%sT00:00:00Z&end=%sT23:59:59Z&limit=10000&adjustment=raw",
 		alpacaBaseURL, symbol, timeframe, startDate, endDate,
@@ -77,64 +97,71 @@ func fetchAndCacheBars(ctx context.Context, symbol, startDate, endDate, resoluti
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
-		return existingCount, fmt.Errorf("building request: %w", err)
+		return 0, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("APCA-API-KEY-ID", apiKey)
 	req.Header.Set("APCA-API-SECRET-KEY", apiSecret)
 
-	resp, err := http.DefaultClient.Do(req)
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return existingCount, fmt.Errorf("alpaca request failed: %w", err)
+		return 0, fmt.Errorf("alpaca request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return existingCount, fmt.Errorf("alpaca returned %d", resp.StatusCode)
+		return 0, fmt.Errorf("alpaca returned %d", resp.StatusCode)
 	}
 
 	var body struct {
 		Bars []AlpacaBar `json:"bars"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return existingCount, fmt.Errorf("decoding alpaca response: %w", err)
+		return 0, fmt.Errorf("decoding alpaca response: %w", err)
 	}
 
 	if len(body.Bars) == 0 {
-		return existingCount, nil
+		return 0, nil
 	}
 
-	// Bulk insert into market_data
+	// Bulk insert into market_data (ON CONFLICT DO NOTHING handles partial overlaps).
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return existingCount, err
+		return 0, err
 	}
 	defer tx.Rollback(ctx)
 
+	const insertSQL = `
+		INSERT INTO market_data (time, symbol, resolution, open, high, low, close, volume)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT DO NOTHING
+	`
 	for _, bar := range body.Bars {
 		t, err := time.Parse(time.RFC3339, bar.Timestamp)
 		if err != nil {
 			continue
 		}
-		_, err = tx.Exec(ctx, `
-			INSERT INTO market_data (time, symbol, resolution, open, high, low, close, volume)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			ON CONFLICT DO NOTHING
-		`, t, symbol, resolution, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
-		if err != nil {
-			log.Printf("insert error for %s@%s: %v", symbol, bar.Timestamp, err)
+		if _, err := tx.Exec(ctx, insertSQL,
+			t, symbol, resolution, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume,
+		); err != nil {
+			tx.Rollback(ctx)
+			log.Printf("insert error for %s: %v", symbol, err)
+			return 0, fmt.Errorf("insert failed: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return existingCount, err
+		return 0, err
 	}
 
-	// Return total count after insert
+	// Return total count in the requested range after insert.
 	var totalCount int
-	db.QueryRow(ctx,
+	if err := db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM market_data WHERE symbol=$1 AND resolution=$2 AND time >= $3::date AND time <= $4::date`,
 		symbol, resolution, startDate, endDate,
-	).Scan(&totalCount)
+	).Scan(&totalCount); err != nil {
+		return 0, fmt.Errorf("count query failed: %w", err)
+	}
 
 	return totalCount, nil
 }

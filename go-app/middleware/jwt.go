@@ -89,6 +89,32 @@ func HashToken(token string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// ValidateToken parses and validates a JWT string. Returns userID, email, or error.
+func ValidateToken(tokenStr string) (string, string, error) {
+	if publicKey == nil {
+		return "", "", fmt.Errorf("public key not loaded")
+	}
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return publicKey, nil
+	})
+	if err != nil || !token.Valid {
+		return "", "", fmt.Errorf("invalid or expired token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", "", fmt.Errorf("invalid token claims")
+	}
+	userID, _ := claims["sub"].(string)
+	email, _ := claims["email"].(string)
+	if userID == "" || email == "" {
+		return "", "", fmt.Errorf("missing required claims")
+	}
+	return userID, email, nil
+}
+
 // RequireAuth is HTTP middleware that validates the Bearer JWT.
 func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -105,27 +131,12 @@ func RequireAuth(next http.Handler) http.Handler {
 		}
 
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return publicKey, nil
-		})
-
-		if err != nil || !token.Valid {
+		userID, email, err := ValidateToken(tokenStr)
+		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
-			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusUnauthorized)
 			return
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			http.Error(w, `{"error":"invalid token claims"}`, http.StatusUnauthorized)
-			return
-		}
-
-		userID, _ := claims["sub"].(string)
-		email, _ := claims["email"].(string)
 
 		ctx := context.WithValue(r.Context(), userIDKey, userID)
 		ctx = context.WithValue(ctx, userEmailKey, email)
@@ -134,9 +145,13 @@ func RequireAuth(next http.Handler) http.Handler {
 }
 
 // GetUserID extracts the authenticated user ID from context.
-func GetUserID(ctx context.Context) string {
-	v, _ := ctx.Value(userIDKey).(string)
-	return v
+// Returns the user ID and true if present and non-empty, otherwise empty string and false.
+func GetUserID(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(userIDKey).(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
 }
 
 // GetUserEmail extracts the authenticated user email from context.

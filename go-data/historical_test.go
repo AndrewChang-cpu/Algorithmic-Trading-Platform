@@ -146,34 +146,58 @@ func TestDeduplication(t *testing.T) {
 
 	body := `{"symbols":["SPY"],"start_date":"2024-01-02","end_date":"2024-01-05","resolution":"1d"}`
 
-	// First call — should hit Alpaca
+	// First call — should hit Alpaca and insert 4 bars.
 	rr1 := postHistorical(t, body)
 	if rr1.Code != http.StatusOK {
 		t.Fatalf("first call: expected 200, got %d: %s", rr1.Code, rr1.Body.String())
 	}
+	if count.Load() != 1 {
+		t.Errorf("expected Alpaca called once after first request, got %d", count.Load())
+	}
 
-	// Second identical call — should NOT hit Alpaca (dedup)
+	// Second identical call — full range covered, should NOT hit Alpaca.
 	rr2 := postHistorical(t, body)
 	if rr2.Code != http.StatusOK {
 		t.Fatalf("second call: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
 	}
-
-	var resp map[string]int
-	json.NewDecoder(rr2.Body).Decode(&resp)
-	if resp["bars_ready"] != 4 {
-		t.Errorf("expected bars_ready=4, got %d", resp["bars_ready"])
+	var resp2 map[string]int
+	json.NewDecoder(rr2.Body).Decode(&resp2)
+	if resp2["bars_ready"] != 4 {
+		t.Errorf("second call: expected bars_ready=4, got %d", resp2["bars_ready"])
 	}
-
 	if count.Load() != 1 {
-		t.Errorf("expected Alpaca called exactly once, got %d calls", count.Load())
+		t.Errorf("expected Alpaca called exactly once after second request, got %d calls", count.Load())
 	}
 
-	var dbCount int
+	// Delete 2 rows to create a gap — gap detection should trigger a third Alpaca call.
+	db.Exec(context.Background(),
+		"DELETE FROM market_data WHERE symbol='SPY' AND time IN (SELECT time FROM market_data WHERE symbol='SPY' ORDER BY time LIMIT 2)",
+	)
+
+	var dbCountAfterDelete int
 	db.QueryRow(context.Background(),
 		"SELECT COUNT(*) FROM market_data WHERE symbol='SPY'",
-	).Scan(&dbCount)
-	if dbCount != 4 {
-		t.Errorf("expected 4 rows in DB after dedup, got %d", dbCount)
+	).Scan(&dbCountAfterDelete)
+	if dbCountAfterDelete != 2 {
+		t.Fatalf("expected 2 rows after delete, got %d", dbCountAfterDelete)
+	}
+
+	// Third call — gap detected, Alpaca must be called again.
+	rr3 := postHistorical(t, body)
+	if rr3.Code != http.StatusOK {
+		t.Fatalf("third call: expected 200, got %d: %s", rr3.Code, rr3.Body.String())
+	}
+	if count.Load() != 2 {
+		t.Errorf("expected Alpaca called twice total (gap detected), got %d calls", count.Load())
+	}
+
+	// ON CONFLICT DO NOTHING restores deleted rows — should be back to 4.
+	var dbCountAfterRefetch int
+	db.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM market_data WHERE symbol='SPY'",
+	).Scan(&dbCountAfterRefetch)
+	if dbCountAfterRefetch != 4 {
+		t.Errorf("expected 4 rows in DB after gap re-fetch, got %d", dbCountAfterRefetch)
 	}
 }
 
@@ -181,5 +205,39 @@ func TestInvalidBody(t *testing.T) {
 	rr := postHistorical(t, `{}`)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTransactionRollback(t *testing.T) {
+	// Clean slate for this symbol so no cached rows interfere.
+	db.Exec(context.Background(), "DELETE FROM market_data WHERE symbol='FAIL'")
+
+	// Mock Alpaca returns bars normally.
+	var count atomic.Int32
+	srv := mockAlpacaServer(t, &count)
+	defer srv.Close()
+	alpacaBaseURL = srv.URL
+
+	// Swap in a closed pool to force INSERT failures.
+	realDB := db
+	closedPool, err := pgxpool.New(context.Background(), "postgres://invalid:invalid@localhost:1/nonexistent?sslmode=disable&connect_timeout=1")
+	if err == nil {
+		closedPool.Close()
+		db = closedPool
+	}
+	defer func() { db = realDB }()
+
+	body := `{"symbols":["FAIL"],"start_date":"2024-01-02","end_date":"2024-01-05","resolution":"1d"}`
+	rr := postHistorical(t, body)
+
+	// With a broken DB the handler should respond 200 (partial-success path) but bars_ready=0,
+	// because fetchAndCacheBars logs the error and continues. Verify no rows were committed.
+	db = realDB
+	var dbCount int
+	db.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM market_data WHERE symbol='FAIL'",
+	).Scan(&dbCount)
+	if dbCount != 0 {
+		t.Errorf("expected 0 rows in DB after rollback, got %d (status=%d)", dbCount, rr.Code)
 	}
 }

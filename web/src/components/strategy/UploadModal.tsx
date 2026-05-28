@@ -107,7 +107,7 @@ export default function UploadModal({ onClose, strategyId }: UploadModalProps) {
                   <div style={{ color: '#6e7681', marginBottom: '8px' }}>Drag & drop your .py strategy file</div>
                   <label style={{ color: '#388bfd', cursor: 'pointer' }}>
                     Browse
-                    <input type="file" accept=".py" onChange={handleFileInput} style={{ display: 'none' }} />
+                    <input data-testid="upload-file-input" type="file" accept=".py" onChange={handleFileInput} style={{ display: 'none' }} />
                   </label>
                 </>
               )}
@@ -133,6 +133,7 @@ export default function UploadModal({ onClose, strategyId }: UploadModalProps) {
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '6px', color: '#c9d1d9' }}>Strategy name</label>
               <input
+                data-testid="strategy-name-input"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 autoFocus
@@ -147,6 +148,7 @@ export default function UploadModal({ onClose, strategyId }: UploadModalProps) {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button style={btn('secondary')} onClick={() => setStep('file')}>Back</button>
               <button
+                data-testid="upload-submit"
                 style={{ ...btn('primary'), opacity: name.trim() ? 1 : 0.5 }}
                 disabled={!name.trim()}
                 onClick={() => uploadMutation.mutate()}
@@ -170,7 +172,7 @@ export default function UploadModal({ onClose, strategyId }: UploadModalProps) {
         )}
 
         {step === 'success' && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          <div data-testid="upload-success" style={{ textAlign: 'center', padding: '16px 0' }}>
             <div style={{ fontSize: '32px', marginBottom: '12px', color: '#3fb950' }}>+</div>
             <div style={{ color: '#3fb950', marginBottom: '8px', fontWeight: 600 }}>
               {strategyId ? 'New version uploaded' : 'Strategy uploaded (v1)'}
@@ -188,10 +190,13 @@ export default function UploadModal({ onClose, strategyId }: UploadModalProps) {
 
         {step === 'error' && (
           <div>
-            <div style={{
-              padding: '12px', background: '#3d1f1f', border: '1px solid #f85149',
-              borderRadius: '6px', color: '#f85149', marginBottom: '16px',
-            }}>
+            <div
+              data-testid="upload-error"
+              style={{
+                padding: '12px', background: '#3d1f1f', border: '1px solid #f85149',
+                borderRadius: '6px', color: '#f85149', marginBottom: '16px',
+              }}
+            >
               {errorMsg}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>

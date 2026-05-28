@@ -1,6 +1,6 @@
 import os, zipfile, pytest
 from datetime import datetime, timezone
-from data_materializer import materialize_lean_csv
+from data_materializer import materialize_lean_csv, _milliseconds_since_midnight as _to_ms
 
 def test_daily_bar_price_scaling(tmp_path):
     rows = [{
@@ -51,3 +51,7 @@ def test_multiple_dates(tmp_path):
     materialize_lean_csv(rows, str(tmp_path), "SPY", "1d")
     assert (tmp_path / "equity/usa/daily/spy/20240102_trade.zip").exists()
     assert (tmp_path / "equity/usa/daily/spy/20240103_trade.zip").exists()
+
+def test_to_ms_includes_microseconds():
+    dt = datetime(2024, 1, 2, 9, 30, 0, 500000)  # 9:30:00.500
+    assert _to_ms(dt, "1m") == 34200500  # 9*3600000 + 30*60000 + 500

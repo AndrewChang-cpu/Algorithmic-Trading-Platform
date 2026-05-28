@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestRegister(t *testing.T) {
+	testRedis.FlushAll()
 	t.Run("201 on valid input", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		Register(rr, jsonReq("POST", "/", `{"email":"reg-201@test.com","password":"password123"}`))
@@ -45,6 +48,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
+	testRedis.FlushAll()
 	// Seed a user for login tests.
 	Register(httptest.NewRecorder(), jsonReq("POST", "/",
 		`{"email":"login-test@test.com","password":"password123"}`))
@@ -80,6 +84,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestRefresh(t *testing.T) {
+	testRedis.FlushAll()
 	t.Run("200 returns new tokens", func(t *testing.T) {
 		rr1 := httptest.NewRecorder()
 		Register(rr1, jsonReq("POST", "/", `{"email":"refresh-200@test.com","password":"password123"}`))
@@ -128,6 +133,7 @@ func TestRefresh(t *testing.T) {
 }
 
 func TestLogout(t *testing.T) {
+	testRedis.FlushAll()
 	rr1 := httptest.NewRecorder()
 	Register(rr1, jsonReq("POST", "/", `{"email":"logout-test@test.com","password":"password123"}`))
 	var tokens map[string]string
@@ -137,5 +143,77 @@ func TestLogout(t *testing.T) {
 	Logout(rr, jsonReq("POST", "/", `{"refreshToken":"`+tokens["refreshToken"]+`"}`))
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d", rr.Code)
+	}
+}
+
+// jsonReqWithIP builds a POST request with a JSON body and a spoofed client IP
+// via X-Forwarded-For, so rate-limit tests can use distinct keys per subtest.
+func jsonReqWithIP(method, target, body, ip string) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", ip)
+	return req
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	testRedis.FlushAll()
+	// Seed a user so the first 10 attempts can reach bcrypt comparison.
+	Register(httptest.NewRecorder(), jsonReqWithIP("POST", "/",
+		`{"email":"ratelimit-login@test.com","password":"password123"}`, "10.0.0.1"))
+
+	ip := "10.1.0.1" // unique IP for this test to avoid state from other tests
+
+	t.Run("first 10 attempts not rate-limited", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			rr := httptest.NewRecorder()
+			Login(rr, jsonReqWithIP("POST", "/",
+				`{"email":"ratelimit-login@test.com","password":"password123"}`, ip))
+			if rr.Code == http.StatusTooManyRequests {
+				t.Fatalf("attempt %d unexpectedly rate-limited (got 429)", i+1)
+			}
+		}
+	})
+
+	t.Run("11th attempt returns 429", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+		Login(rr, jsonReqWithIP("POST", "/",
+			`{"email":"ratelimit-login@test.com","password":"password123"}`, ip))
+		if rr.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429 on 11th attempt, got %d", rr.Code)
+		}
+	})
+}
+
+func TestRefreshDeleteFailure(t *testing.T) {
+	// Register a user to get a valid refresh token.
+	rr1 := httptest.NewRecorder()
+	Register(rr1, jsonReqWithIP("POST", "/",
+		`{"email":"refresh-delfail@test.com","password":"password123"}`, "10.2.0.1"))
+	var tokens map[string]string
+	decodeJSON(t, rr1, &tokens)
+
+	// Simulate DELETE failure by replacing the refresh_tokens table with a
+	// read-only view over a renamed backing table. SELECT still succeeds (the
+	// view exposes the same rows), but DELETE against a plain view fails.
+	ctx := context.Background()
+	if _, err := testPool.Exec(ctx,
+		"ALTER TABLE refresh_tokens RENAME TO refresh_tokens_bak"); err != nil {
+		t.Fatalf("rename table: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		"CREATE VIEW refresh_tokens AS SELECT * FROM refresh_tokens_bak"); err != nil {
+		// Restore and skip if the view cannot be created.
+		testPool.Exec(ctx, "ALTER TABLE refresh_tokens_bak RENAME TO refresh_tokens") //nolint:errcheck
+		t.Skipf("could not create view for DELETE failure simulation: %v", err)
+	}
+	defer func() {
+		testPool.Exec(ctx, "DROP VIEW IF EXISTS refresh_tokens")                       //nolint:errcheck
+		testPool.Exec(ctx, "ALTER TABLE refresh_tokens_bak RENAME TO refresh_tokens") //nolint:errcheck
+	}()
+
+	rr := httptest.NewRecorder()
+	Refresh(rr, jsonReq("POST", "/", `{"refreshToken":"`+tokens["refreshToken"]+`"}`))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 when DELETE fails, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

@@ -48,7 +48,7 @@ test('upload modal success shows uploaded confirmation', async ({ page }) => {
 
   // Step 1: file drop zone — select file then click "Next"
   await expect(page.getByText(/drag.*drop/i)).toBeVisible()
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('[data-testid="upload-file-input"]', {
     name: 'strategy.py',
     mimeType: 'text/plain',
     buffer: Buffer.from('class MyStrat(QCAlgorithm):\n    pass\n'),
@@ -56,10 +56,11 @@ test('upload modal success shows uploaded confirmation', async ({ page }) => {
   await page.getByRole('button', { name: 'Next' }).click()
 
   // Step 2: strategy name
-  await page.getByPlaceholder('My Momentum Strategy').fill('My Strategy')
-  await page.getByRole('button', { name: 'Upload', exact: true }).click()
+  await page.getByTestId('strategy-name-input').fill('My Strategy')
+  await page.getByTestId('upload-submit').click()
 
-  await expect(page.getByText(/strategy uploaded/i)).toBeVisible()
+  await expect(page.getByTestId('upload-success')).toBeVisible()
+  await expect(page.getByTestId('upload-success')).toContainText(/strategy uploaded/i)
 })
 
 test('upload modal error shows violation text', async ({ page }) => {
@@ -77,15 +78,16 @@ test('upload modal error shows violation text', async ({ page }) => {
   await page.goto('/strategies')
   await page.getByRole('button', { name: /upload strategy/i }).first().click()
 
-  await page.setInputFiles('input[type="file"]', {
+  await page.setInputFiles('[data-testid="upload-file-input"]', {
     name: 'bad.py',
     mimeType: 'text/plain',
     buffer: Buffer.from('import os\nclass MyStrat(QCAlgorithm): pass\n'),
   })
   await page.getByRole('button', { name: 'Next' }).click()
 
-  await page.getByPlaceholder('My Momentum Strategy').fill('Bad Strategy')
-  await page.getByRole('button', { name: 'Upload', exact: true }).click()
+  await page.getByTestId('strategy-name-input').fill('Bad Strategy')
+  await page.getByTestId('upload-submit').click()
 
-  await expect(page.getByText(/import os/i)).toBeVisible()
+  await expect(page.getByTestId('upload-error')).toBeVisible()
+  await expect(page.getByTestId('upload-error')).toContainText(/import os/i)
 })

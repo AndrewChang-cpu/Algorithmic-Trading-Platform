@@ -43,6 +43,50 @@ LEAN_KAFKA_BOOTSTRAP_SERVERS = os.environ.get("LEAN_KAFKA_BOOTSTRAP_SERVERS", "h
 
 app = Celery("atp", broker=REDIS_URL, backend=REDIS_URL)
 
+PERFORMANCE_METRICS_COLS = (
+    "job_id",
+    "total_return_pct",
+    "benchmark_return_pct",
+    "compounding_annual_return",
+    "alpha",
+    "beta",
+    "sharpe_ratio",
+    "sortino_ratio",
+    "max_drawdown_pct",
+    "max_drawdown_duration_days",
+    "drawdown_recovery_days",
+    "volatility_annual",
+    "annual_variance",
+    "information_ratio",
+    "tracking_error",
+    "treynor_ratio",
+    "probabilistic_sharpe_ratio",
+    "value_at_risk_99",
+    "value_at_risk_95",
+    "total_trades",
+    "winning_trades",
+    "losing_trades",
+    "win_rate_pct",
+    "loss_rate_pct",
+    "avg_win_pct",
+    "avg_loss_pct",
+    "profit_loss_ratio",
+    "expectancy",
+    "total_fees",
+    "avg_trade_duration",
+    "max_consecutive_wins",
+    "max_consecutive_losses",
+    "largest_win",
+    "largest_loss",
+    "avg_mae",
+    "avg_mfe",
+    "start_equity",
+    "end_equity",
+    "net_profit",
+    "portfolio_turnover",
+    "estimated_capacity",
+)
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _get_db():
@@ -61,6 +105,10 @@ def _get_s3():
 def _get_redis():
     import redis
     return redis.from_url(REDIS_URL)
+
+def _strip_currency(v):
+    s = v if isinstance(v, str) else str(v)
+    return s.replace("$", "").replace(",", "").lstrip("-")
 
 def _logger(job_id):
     return logging.LoggerAdapter(logging.getLogger(__name__), {"job_id": job_id})
@@ -165,12 +213,13 @@ def _write_lean_live_config(job_dir, class_name, job_id):
 def _store_results(conn, job_id, results_json):
     metrics = parse_performance_metrics(results_json)
     metrics["job_id"] = job_id
-    cols = ", ".join(metrics.keys())
-    placeholders = ", ".join(["%s"] * len(metrics))
+    col_str = ", ".join(PERFORMANCE_METRICS_COLS)
+    placeholders = ", ".join(f"%({col})s" for col in PERFORMANCE_METRICS_COLS)
+    values = {col: metrics.get(col) for col in PERFORMANCE_METRICS_COLS}
     with conn.cursor() as cur:
         cur.execute(
-            f"INSERT INTO performance_metrics ({cols}) VALUES ({placeholders}) ON CONFLICT (job_id) DO NOTHING",
-            list(metrics.values())
+            f"INSERT INTO performance_metrics ({col_str}) VALUES ({placeholders}) ON CONFLICT (job_id) DO NOTHING",
+            values
         )
 
     points = parse_equity_curve(results_json)
@@ -228,6 +277,9 @@ def run_lean_backtest_task(self, job_id: str):
 
         # Materialize CSV files
         rows_by_symbol = _fetch_market_data(conn, symbols, start_date, end_date, resolution)
+        for symbol in symbols:
+            if not rows_by_symbol.get(symbol):
+                raise ValueError(f"No market data available for {symbol} in requested range")
         data_dir = os.path.join(job_dir, "data")
         for symbol, rows in rows_by_symbol.items():
             materialize_lean_csv(rows, data_dir, symbol, resolution)
@@ -266,7 +318,6 @@ def run_lean_live_task(self, job_id: str):
     log = _logger(job_id)
     log.info("Starting live task")
     conn = _get_db()
-    r = _get_redis()
     job_dir = os.path.join(LEAN_JOB_TMP_DIR, job_id)
     container_id = None
 
@@ -298,6 +349,9 @@ def run_lean_live_task(self, job_id: str):
         resp.raise_for_status()
 
         rows_by_symbol = _fetch_market_data(conn, symbols, warmup_start, today_str, resolution)
+        for symbol in symbols:
+            if not rows_by_symbol.get(symbol):
+                raise ValueError(f"No market data available for {symbol} in requested range")
         data_dir = os.path.join(job_dir, "data")
         for symbol, rows in rows_by_symbol.items():
             materialize_lean_csv(rows, data_dir, symbol, resolution)
@@ -306,35 +360,40 @@ def run_lean_live_task(self, job_id: str):
         _update_job_status(conn, job_id, "running")
 
         container_id = run_lean_live(job_id, job_dir)
-        r.set(f"job:{job_id}:container", container_id, ex=86400)
 
-        producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
+        r = _get_redis()
+        try:
+            r.set(f"job:{job_id}:container", container_id, ex=86400)
 
-        # Polling loop
-        while True:
-            time.sleep(5)
+            producer = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
 
-            # Check stop signal
-            if r.get(f"job:{job_id}:stop"):
-                log.info("Stop signal received")
-                break
+            # Polling loop
+            while True:
+                time.sleep(5)
 
-            # Check container health
-            if not is_container_running(container_id):
-                log.info("Container exited on its own")
-                break
+                # Check stop signal
+                if r.get(f"job:{job_id}:stop"):
+                    log.info("Stop signal received")
+                    break
 
-            # Poll and publish results snapshot
-            snapshot = poll_live_results(job_dir)
-            if snapshot:
-                runtime = snapshot.get("runtimeStatistics", {})
-                _publish_portfolio_snapshot(producer, job_id, {
-                    "equity": runtime.get("Equity", "0").replace("$", "").replace(",", ""),
-                    "unrealized": runtime.get("Unrealized", "0").replace("$", "").replace(",", ""),
-                    "holdings": runtime.get("Holdings", "0").replace("$", "").replace(",", ""),
-                    "fees": runtime.get("Fees", "0").replace("-$", "").replace("$", "").replace(",", ""),
-                    "time": datetime.now(tz=timezone.utc).isoformat(),
-                })
+                # Check container health
+                if not is_container_running(container_id):
+                    log.info("Container exited on its own")
+                    break
+
+                # Poll and publish results snapshot
+                snapshot = poll_live_results(job_dir)
+                if snapshot:
+                    runtime = snapshot.get("runtimeStatistics", {})
+                    _publish_portfolio_snapshot(producer, job_id, {
+                        "equity": _strip_currency(runtime.get("Equity", "0")),
+                        "unrealized": _strip_currency(runtime.get("Unrealized", "0")),
+                        "holdings": _strip_currency(runtime.get("Holdings", "0")),
+                        "fees": _strip_currency(runtime.get("Fees", "0")),
+                        "time": datetime.now(tz=timezone.utc).isoformat(),
+                    })
+        finally:
+            r.close()
 
         producer.flush()
 

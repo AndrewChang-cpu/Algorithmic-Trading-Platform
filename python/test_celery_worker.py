@@ -183,6 +183,20 @@ def _mock_requests_post():
     return resp
 
 
+def _seed_market_data(dsn, symbol="SPY", resolution="1d"):
+    """Insert a minimal market_data row so the fail-fast guard passes."""
+    conn = psycopg2.connect(dsn)
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO market_data (time, symbol, resolution, open, high, low, close, volume)"
+                " VALUES ('2024-01-02 00:00:00+00', %s, %s, 100, 101, 99, 100, 1000)"
+                " ON CONFLICT DO NOTHING",
+                (symbol, resolution),
+            )
+    conn.close()
+
+
 def _run_task(dsn, job_id, s3_key, strategy_code, lean_side_effect):
     """Run the backtest task with moto S3 and mocked lean_runner."""
     import celery_worker
@@ -204,6 +218,7 @@ def _run_task(dsn, job_id, s3_key, strategy_code, lean_side_effect):
 def test_happy_path(pg_dsn, tmp_path):
     data = _seed(pg_dsn)
     job_id = data["job_id"]
+    _seed_market_data(pg_dsn)
 
     s3 = boto3.client("s3", region_name="us-east-1",
                       aws_access_key_id="test", aws_secret_access_key="test")
@@ -258,6 +273,7 @@ def test_strategy_validation_failure(pg_dsn, tmp_path):
 def test_lean_timeout(pg_dsn, tmp_path):
     data = _seed(pg_dsn)
     job_id = data["job_id"]
+    _seed_market_data(pg_dsn)
 
     s3 = boto3.client("s3", region_name="us-east-1",
                       aws_access_key_id="test", aws_secret_access_key="test")

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,7 +16,11 @@ import (
 
 // SubmitJob handles POST /api/jobs
 func SubmitJob(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
 	var req models.SubmitJobRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -83,7 +88,11 @@ func nullableDate(s string) interface{} {
 
 // GetJob handles GET /api/jobs/:id
 func GetJob(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	jobID := r.PathValue("id")
 
 	var j models.JobResponse
@@ -114,22 +123,33 @@ func GetJob(w http.ResponseWriter, r *http.Request) {
 
 // ListJobs handles GET /api/jobs
 func ListJobs(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	q := r.URL.Query()
 
-	pageStr := q.Get("page")
-	if pageStr == "" {
-		pageStr = "1"
+	page := 1
+	if pageStr := q.Get("page"); pageStr != "" {
+		var err error
+		page, err = strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			writeError(w, http.StatusBadRequest, "invalid page or limit parameter")
+			return
+		}
 	}
-	limitStr := q.Get("limit")
-	if limitStr == "" {
-		limitStr = "20"
+
+	limit := 20
+	if limitStr := q.Get("limit"); limitStr != "" {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit < 1 {
+			writeError(w, http.StatusBadRequest, "invalid page or limit parameter")
+			return
+		}
 	}
-	page, _ := strconv.Atoi(pageStr)
-	limit, _ := strconv.Atoi(limitStr)
-	if page < 1 {
-		page = 1
-	}
+
 	offset := (page - 1) * limit
 
 	typeFilter := q.Get("type")
@@ -178,18 +198,31 @@ func ListJobs(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var j models.JobResponse
 		var returnPct, sharpe *float64
-		rows.Scan(
+		if err := rows.Scan(
 			&j.ID, &j.StrategyName, &j.VersionNumber, &j.Type, &j.Status, &j.DataSource,
 			&j.Symbols, &j.Resolution, &j.ErrorMessage, &j.CreatedAt, &j.StartedAt, &j.CompletedAt,
 			&returnPct, &sharpe,
-		)
+		); err != nil {
+			log.Printf("scan error: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
 		jobs = append(jobs, j)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("rows error: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
 	}
 
 	var total int
-	db.Pool.QueryRow(r.Context(), fmt.Sprintf(`
+	if err := db.Pool.QueryRow(r.Context(), fmt.Sprintf(`
 		SELECT COUNT(*) FROM jobs j %s
-	`, where), filterArgs...).Scan(&total)
+	`, where), filterArgs...).Scan(&total); err != nil {
+		log.Printf("count query error: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
 
 	if jobs == nil {
 		jobs = []models.JobResponse{}
@@ -199,7 +232,11 @@ func ListJobs(w http.ResponseWriter, r *http.Request) {
 
 // GetJobMetrics handles GET /api/jobs/:id/metrics
 func GetJobMetrics(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	jobID := r.PathValue("id")
 
 	var ownerID string
@@ -234,7 +271,11 @@ func GetJobMetrics(w http.ResponseWriter, r *http.Request) {
 
 // GetPortfolio handles GET /api/jobs/:id/portfolio
 func GetPortfolio(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	jobID := r.PathValue("id")
 
 	var ownerID string
@@ -274,8 +315,17 @@ func GetPortfolio(w http.ResponseWriter, r *http.Request) {
 	var points []models.PortfolioPoint
 	for rows.Next() {
 		var p models.PortfolioPoint
-		rows.Scan(&p.Time, &p.Open, &p.High, &p.Low, &p.Close)
+		if err := rows.Scan(&p.Time, &p.Open, &p.High, &p.Low, &p.Close); err != nil {
+			log.Printf("scan error: %v", err)
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
 		points = append(points, p)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("rows error: %v", err)
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
 	}
 	if points == nil {
 		points = []models.PortfolioPoint{}
@@ -285,7 +335,11 @@ func GetPortfolio(w http.ResponseWriter, r *http.Request) {
 
 // CancelJob handles POST /api/jobs/:id/cancel
 func CancelJob(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r.Context())
+	userID, ok := middleware.GetUserID(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 	jobID := r.PathValue("id")
 
 	var ownerID, status string

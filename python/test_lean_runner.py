@@ -66,6 +66,7 @@ def test_stop_lean_live(tmp_path):
         ["docker", "stop", "--time", "30", "some-id"],
         capture_output=True,
         text=True,
+        check=True,
     )
 
 
@@ -82,3 +83,34 @@ def test_poll_live_results_returns_dict(tmp_path):
 
     result = lean_runner.poll_live_results(str(tmp_path))
     assert result == {"equity": 10000}
+
+
+def test_timeout_kills_container(tmp_path):
+    """Timeout handler must find the container by job label and docker kill it."""
+    container_id = "deadbeef1234"
+
+    def side_effect(cmd, **kwargs):
+        if cmd[0:2] == ["docker", "run"]:
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
+        if cmd[0:4] == ["docker", "ps", "-q", "--filter"]:
+            return MagicMock(returncode=0, stdout=f"{container_id}\n")
+        # docker kill
+        return MagicMock(returncode=0, stdout="")
+
+    with patch("lean_runner.subprocess.run", side_effect=side_effect) as mock_run:
+        with pytest.raises(TimeoutError):
+            lean_runner.run_lean_backtest("job-timeout", str(tmp_path), timeout_seconds=1)
+
+    kill_calls = [c for c in mock_run.call_args_list if c.args[0][0:2] == ["docker", "kill"]]
+    assert len(kill_calls) == 1
+    assert kill_calls[0].args[0] == ["docker", "kill", container_id]
+
+
+def test_stop_lean_live_raises_on_failure(tmp_path):
+    """stop_lean_live must propagate CalledProcessError when docker stop fails."""
+    with patch(
+        "lean_runner.subprocess.run",
+        side_effect=subprocess.CalledProcessError(1, "docker stop"),
+    ):
+        with pytest.raises(subprocess.CalledProcessError):
+            lean_runner.stop_lean_live("bad-container-id", str(tmp_path))

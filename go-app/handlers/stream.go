@@ -39,67 +39,41 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// authenticateWS validates the JWT from the ?token= query param.
-// Returns userID and true on success, empty string and false on failure.
-func authenticateWS(r *http.Request) (string, bool) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		return "", false
+// wsFirstMessageAuth reads the first WebSocket message and validates the JWT.
+// Returns userID on success. Sends a close frame and returns an error on failure.
+func wsFirstMessageAuth(conn *websocket.Conn) (string, error) {
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, authMsg, err := conn.ReadMessage()
+	if err != nil {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "unauthorized"))
+		return "", fmt.Errorf("no auth message: %w", err)
+	}
+	conn.SetReadDeadline(time.Time{}) // clear deadline
+
+	var authPayload struct {
+		Type  string `json:"type"`
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(authMsg, &authPayload); err != nil || authPayload.Type != "auth" {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "unauthorized"))
+		return "", fmt.Errorf("invalid auth payload")
 	}
 
-	// Inject token into a fake request header so RequireAuth can validate it.
-	fakeReq, _ := http.NewRequest("GET", "/", nil)
-	fakeReq.Header.Set("Authorization", "Bearer "+token)
-
-	var userID string
-	done := make(chan struct{})
-	handler := middleware.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID = middleware.GetUserID(r.Context())
-		close(done)
-	}))
-	rr := &captureWriter{}
-	handler.ServeHTTP(rr, fakeReq)
-	select {
-	case <-done:
-		return userID, userID != ""
-	default:
-		return "", false
+	userID, _, err := middleware.ValidateToken(authPayload.Token)
+	if err != nil {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "unauthorized"))
+		return "", fmt.Errorf("invalid token: %w", err)
 	}
-}
 
-// captureWriter discards the response but satisfies http.ResponseWriter.
-type captureWriter struct {
-	code int
+	conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"auth_ok"}`))
+	return userID, nil
 }
-
-func (c *captureWriter) Header() http.Header         { return http.Header{} }
-func (c *captureWriter) Write(b []byte) (int, error) { return len(b), nil }
-func (c *captureWriter) WriteHeader(code int)        { c.code = code }
 
 // JobStatusStream handles WS /api/stream/jobs/:id
 // Streams job status updates and log lines to the client.
-// Token validated at connection time only.
+// Auth via first message: {"type":"auth","token":"<JWT>"}
 func JobStatusStream(w http.ResponseWriter, r *http.Request) {
-	userID, ok := authenticateWS(r)
-	if !ok {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
 	jobID := r.PathValue("id")
-
-	// Verify job ownership
-	var ownerID string
-	err := db.Pool.QueryRow(r.Context(), `
-		SELECT s.user_id FROM jobs j
-		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
-		JOIN strategies s ON sv.strategy_id = s.id
-		WHERE j.id = $1
-	`, jobID).Scan(&ownerID)
-	if err != nil || ownerID != userID {
-		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
-		return
-	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -107,6 +81,24 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
+	userID, err := wsFirstMessageAuth(conn)
+	if err != nil {
+		return
+	}
+
+	// Verify job belongs to this user
+	var ownerID string
+	err = db.Pool.QueryRow(r.Context(), `
+		SELECT s.user_id FROM jobs j
+		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
+		JOIN strategies s ON sv.strategy_id = s.id
+		WHERE j.id = $1
+	`, jobID).Scan(&ownerID)
+	if err != nil || ownerID != userID {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden"))
+		return
+	}
 
 	var lastLogID int
 	ticker := time.NewTicker(2 * time.Second)
@@ -123,12 +115,17 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 			WHERE job_id = $1 AND id > $2
 			ORDER BY id ASC LIMIT 50
 		`, jobID, lastLogID)
-		if err == nil {
+		if err != nil {
+			log.Printf("JobStatusStream: query job_logs error (job %s): %v", jobID, err)
+		} else {
 			for rows.Next() {
 				var id int
 				var level, message string
 				var ts time.Time
-				rows.Scan(&id, &level, &message, &ts)
+				if err := rows.Scan(&id, &level, &message, &ts); err != nil {
+					log.Printf("JobStatusStream: scan job_logs error (job %s): %v", jobID, err)
+					continue
+				}
 				lastLogID = id
 				msg := map[string]interface{}{
 					"type":      "log",
@@ -140,6 +137,9 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 				if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 					return
 				}
+			}
+			if err := rows.Err(); err != nil {
+				log.Printf("JobStatusStream: rows.Err (job %s): %v", jobID, err)
 			}
 			rows.Close()
 		}
@@ -162,33 +162,33 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 
 // PortfolioStream handles WS /api/stream/portfolio/:jobId
 // Consumes Kafka portfolio_data and forwards matching job snapshots.
+// Auth via first message: {"type":"auth","token":"<JWT>"}
 func PortfolioStream(w http.ResponseWriter, r *http.Request) {
-	userID, ok := authenticateWS(r)
-	if !ok {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-
 	jobID := r.PathValue("jobId")
-
-	// Verify ownership
-	var ownerID string
-	err := db.Pool.QueryRow(r.Context(), `
-		SELECT s.user_id FROM jobs j
-		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
-		JOIN strategies s ON sv.strategy_id = s.id
-		WHERE j.id = $1
-	`, jobID).Scan(&ownerID)
-	if err != nil || ownerID != userID {
-		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
-		return
-	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 	defer conn.Close()
+
+	userID, err := wsFirstMessageAuth(conn)
+	if err != nil {
+		return
+	}
+
+	// Verify job belongs to this user
+	var ownerID string
+	err = db.Pool.QueryRow(r.Context(), `
+		SELECT s.user_id FROM jobs j
+		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
+		JOIN strategies s ON sv.strategy_id = s.id
+		WHERE j.id = $1
+	`, jobID).Scan(&ownerID)
+	if err != nil || ownerID != userID {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden"))
+		return
+	}
 
 	kafkaBrokers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
 	if kafkaBrokers == "" {
@@ -202,12 +202,14 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("Kafka consumer error: %v", err)
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "internal error"))
 		return
 	}
 	defer consumer.Close()
 
 	if err := consumer.Subscribe("portfolio_data", nil); err != nil {
 		log.Printf("Kafka subscribe error: %v", err)
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "internal error"))
 		return
 	}
 
@@ -231,8 +233,15 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 
 		msg, err := consumer.ReadMessage(500 * time.Millisecond)
 		if err != nil {
-			// Timeout or no message — keep looping
-			continue
+			kafkaErr, ok := err.(kafka.Error)
+			if ok && kafkaErr.Code() == kafka.ErrTimedOut {
+				// Timeout — no message available, keep looping
+				continue
+			}
+			// Unexpected Kafka error
+			log.Printf("PortfolioStream: Kafka read error (job %s): %v", jobID, err)
+			conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "internal error"))
+			return
 		}
 
 		// Parse and filter by job_id

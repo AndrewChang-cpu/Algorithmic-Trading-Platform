@@ -68,7 +68,8 @@ export default function StrategyDetail() {
     if (strategy && !selectedVersionId && strategy.versions?.length) {
       setSelectedVersionId(strategy.versions[0].id)
     }
-  }, [strategy, selectedVersionId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategy])
 
   const { data: codeData } = useQuery<{ code: string }>({
     queryKey: ['strategy-code', id, selectedVersionId],

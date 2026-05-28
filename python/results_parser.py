@@ -26,7 +26,7 @@ def parse_performance_metrics(results: dict) -> dict:
             return None
         try:
             return float(v)
-        except:
+        except (ValueError, TypeError, KeyError):
             return None
 
     def i(d, key):
@@ -35,7 +35,7 @@ def parse_performance_metrics(results: dict) -> dict:
             return None
         try:
             return int(float(v))
-        except:
+        except (ValueError, TypeError, KeyError):
             return None
 
     return {

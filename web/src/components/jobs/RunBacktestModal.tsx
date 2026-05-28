@@ -86,21 +86,21 @@ export default function RunBacktestModal({ strategyVersionId, onClose }: RunBack
           <form onSubmit={handleParamsSubmit}>
             <div style={fieldWrap}>
               {label('Symbols')}
-              <input style={inputStyle} value={symbols} onChange={e => setSymbols(e.target.value)} placeholder="SPY, QQQ" />
+              <input data-testid="symbols-input" style={inputStyle} value={symbols} onChange={e => setSymbols(e.target.value)} placeholder="SPY, QQQ" />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
                 {label('Start Date')}
-                <input type="date" style={inputStyle} value={startDate} onChange={e => setStartDate(e.target.value)} />
+                <input data-testid="start-date-input" type="date" style={inputStyle} value={startDate} onChange={e => setStartDate(e.target.value)} />
               </div>
               <div>
                 {label('End Date')}
-                <input type="date" style={inputStyle} value={endDate} onChange={e => setEndDate(e.target.value)} />
+                <input data-testid="end-date-input" type="date" style={inputStyle} value={endDate} onChange={e => setEndDate(e.target.value)} />
               </div>
             </div>
             <div style={fieldWrap}>
               {label('Resolution')}
-              <select style={inputStyle} value={resolution} onChange={e => setResolution(e.target.value)}>
+              <select data-testid="resolution-select" style={inputStyle} value={resolution} onChange={e => setResolution(e.target.value)}>
                 <option value="1d">Daily</option>
                 <option value="1h">Hourly</option>
                 <option value="1m">Minute</option>
@@ -130,7 +130,7 @@ export default function RunBacktestModal({ strategyVersionId, onClose }: RunBack
             {error && <div style={{ color: '#f85149', marginBottom: '12px', fontSize: '12px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" onClick={onClose} style={{ padding: '7px 14px', background: '#21262d', border: 'none', borderRadius: '6px', color: '#e6edf3', cursor: 'pointer' }}>Cancel</button>
-              <button type="submit" disabled={submitMutation.isPending} style={{ padding: '7px 14px', background: '#388bfd', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+              <button data-testid="submit-backtest" type="submit" disabled={submitMutation.isPending} style={{ padding: '7px 14px', background: '#388bfd', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
                 {dataSource === 'csv' ? 'Next →' : submitMutation.isPending ? 'Submitting...' : 'Run Backtest'}
               </button>
             </div>
@@ -152,7 +152,7 @@ export default function RunBacktestModal({ strategyVersionId, onClose }: RunBack
         )}
 
         {step === 'queued' && (
-          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          <div data-testid="job-queued-confirmation" style={{ textAlign: 'center', padding: '16px 0' }}>
             <div style={{ color: '#3fb950', marginBottom: '8px', fontWeight: 600 }}>Job queued!</div>
             <div style={{ color: '#6e7681', marginBottom: '16px', fontSize: '12px' }}>Job ID: {jobId}</div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>

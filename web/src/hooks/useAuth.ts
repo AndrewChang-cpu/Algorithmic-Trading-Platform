@@ -14,10 +14,10 @@ export function useLogin() {
   const navigate = useNavigate()
 
   return useMutation({
-    mutationFn: (data: { email: string; password: string }) =>
-      apiClient.post<AuthResponse>('/api/auth/login', data).then((r) => r.data),
-    onSuccess: (data) => {
-      setAuth({ id: data.userId, email: '' }, data.accessToken, data.refreshToken)
+    mutationFn: (req: { email: string; password: string }) =>
+      apiClient.post<AuthResponse>('/api/auth/login', req).then((r) => r.data),
+    onSuccess: (data, req) => {
+      setAuth({ id: data.userId, email: req.email }, data.accessToken, data.refreshToken)
       navigate('/overview')
     },
   })
@@ -28,10 +28,10 @@ export function useRegister() {
   const navigate = useNavigate()
 
   return useMutation({
-    mutationFn: (data: { email: string; password: string }) =>
-      apiClient.post<AuthResponse>('/api/auth/register', data).then((r) => r.data),
-    onSuccess: (data) => {
-      setAuth({ id: data.userId, email: '' }, data.accessToken, data.refreshToken)
+    mutationFn: (req: { email: string; password: string }) =>
+      apiClient.post<AuthResponse>('/api/auth/register', req).then((r) => r.data),
+    onSuccess: (data, req) => {
+      setAuth({ id: data.userId, email: req.email }, data.accessToken, data.refreshToken)
       navigate('/overview')
     },
   })

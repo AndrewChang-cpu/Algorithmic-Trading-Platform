@@ -9,8 +9,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+RUN apt-get update && apt-get install -y --no-install-recommends supervisor && rm -rf /var/lib/apt/lists/*
+
 COPY *.py .
+COPY supervisord.conf /app/supervisord.conf
 
 RUN mkdir -p /logs
 
-CMD ["celery", "-A", "celery_worker", "worker", "--loglevel=info", "--logfile=/logs/celery.log"]
+CMD ["supervisord", "-c", "/app/supervisord.conf"]

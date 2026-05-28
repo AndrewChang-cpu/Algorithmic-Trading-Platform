@@ -43,6 +43,7 @@ def run_lean_backtest(job_id: str, job_dir: str, timeout_seconds: int = 7200) ->
 
     cmd = [
         "docker", "run", "--rm",
+        "--label", f"job_id={job_id}",
         "-v", f"{os.path.abspath(job_dir)}:/lean",
         LEAN_IMAGE
     ]
@@ -56,12 +57,14 @@ def run_lean_backtest(job_id: str, job_dir: str, timeout_seconds: int = 7200) ->
         )
     except subprocess.TimeoutExpired:
         logger.error(f"Backtest job {job_id} timed out after {timeout_seconds}s")
-        # Kill the container
-        subprocess.run(
-            ["docker", "ps", "-q", "--filter", f"ancestor={LEAN_IMAGE}"],
+        kill_result = subprocess.run(
+            ["docker", "ps", "-q", "--filter", f"label=job_id={job_id}"],
             capture_output=True, text=True
         )
-        raise TimeoutError(f"LEAN backtest exceeded {timeout_seconds}s timeout")
+        for cid in kill_result.stdout.strip().splitlines():
+            if cid:
+                subprocess.run(["docker", "kill", cid], check=False)
+        raise TimeoutError(f"LEAN container for job {job_id} timed out after {timeout_seconds}s")
 
     if result.returncode != 0:
         logger.error(f"Backtest job {job_id} failed with exit code {result.returncode}: {result.stderr[:500]}")
@@ -85,6 +88,7 @@ def run_lean_live(job_id: str, job_dir: str) -> str:
 
     cmd = [
         "docker", "run", "-d", "--rm",
+        "--label", f"job_id={job_id}",
         "-v", f"{os.path.abspath(job_dir)}:/lean",
         "--add-host=host.docker.internal:host-gateway",
         LEAN_IMAGE
@@ -109,7 +113,7 @@ def stop_lean_live(container_id: str, job_dir: str) -> Optional[str]:
 
     subprocess.run(
         ["docker", "stop", "--time", "30", container_id],
-        capture_output=True, text=True
+        capture_output=True, text=True, check=True
     )
 
     return _find_results_json(job_dir)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -26,7 +27,7 @@ func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if allowedOrigins == "" || origins[origin] || len(origins) == 0 {
+			if origins[origin] {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -51,6 +52,11 @@ func withAuth(h http.HandlerFunc) http.HandlerFunc {
 func main() {
 	// Load .env for local dev (no-op if missing)
 	_ = godotenv.Load()
+
+	corsOrigins := os.Getenv("CORS_ORIGINS")
+	if corsOrigins == "" {
+		log.Fatal("CORS_ORIGINS must be set")
+	}
 
 	// JWT keys
 	privKey := os.Getenv("JWT_PRIVATE_KEY_PATH")
@@ -84,6 +90,17 @@ func main() {
 	// Redis / Celery queue
 	if err := queue.Init(os.Getenv("REDIS_URL")); err != nil {
 		log.Fatalf("connecting to Redis: %v", err)
+	}
+
+	// Mark orphaned running jobs as failed on restart
+	ctx := context.Background()
+	tag, err := db.Pool.Exec(ctx,
+		"UPDATE jobs SET status='failed', error_message='Server restarted', completed_at=NOW() WHERE status='running'",
+	)
+	if err != nil {
+		log.Printf("warning: startup job cleanup failed: %v", err)
+	} else {
+		log.Printf("startup: marked %d running jobs as failed", tag.RowsAffected())
 	}
 
 	mux := http.NewServeMux()
@@ -122,7 +139,7 @@ func main() {
 		port = "8080"
 	}
 
-	cors := corsMiddleware(os.Getenv("CORS_ORIGINS"))
+	cors := corsMiddleware(corsOrigins)
 	log.Printf("go-app listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
 }

@@ -36,8 +36,20 @@ func makeToken(t *testing.T, userID, email string, exp time.Duration) string {
 	return signed
 }
 
+// makeTokenRawClaims signs a token with exactly the provided claims map,
+// allowing tests to omit or empty specific fields.
+func makeTokenRawClaims(t *testing.T, claims jwt.MapClaims) string {
+	t.Helper()
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signed, err := tok.SignedString(privateKey)
+	if err != nil {
+		t.Fatalf("signing: %v", err)
+	}
+	return signed
+}
+
 func okHandler(w http.ResponseWriter, r *http.Request) {
-	userID := GetUserID(r.Context())
+	userID, _ := GetUserID(r.Context())
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(userID))
 }
@@ -99,6 +111,71 @@ func TestRequireAuth_TamperedToken(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestRequireAuth_MissingSub(t *testing.T) {
+	setupTestKeys(t)
+	token := makeTokenRawClaims(t, jwt.MapClaims{
+		"email": "test@test.com",
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+
+	RequireAuth(http.HandlerFunc(okHandler)).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for missing sub, got %d", rr.Code)
+	}
+}
+
+func TestRequireAuth_EmptyEmail(t *testing.T) {
+	setupTestKeys(t)
+	token := makeTokenRawClaims(t, jwt.MapClaims{
+		"sub":   "user-123",
+		"email": "",
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+		"iat":   time.Now().Unix(),
+	})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+
+	RequireAuth(http.HandlerFunc(okHandler)).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for empty email, got %d", rr.Code)
+	}
+}
+
+func TestGetUserID_PresentAndMissing(t *testing.T) {
+	setupTestKeys(t)
+
+	// Present: full valid token goes through RequireAuth, context should have userID
+	token := makeToken(t, "user-456", "x@y.com", 15*time.Minute)
+	var capturedID string
+	var capturedOk bool
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedID, capturedOk = GetUserID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	RequireAuth(handler).ServeHTTP(rr, req)
+	if !capturedOk || capturedID != "user-456" {
+		t.Errorf("expected (user-456, true), got (%q, %v)", capturedID, capturedOk)
+	}
+
+	// Missing: context without the key set
+	id, ok := GetUserID(req.Context())
+	if ok || id != "" {
+		t.Errorf("expected ('', false) for bare context, got (%q, %v)", id, ok)
 	}
 }
 

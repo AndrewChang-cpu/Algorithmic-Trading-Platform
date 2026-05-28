@@ -50,14 +50,15 @@ test('run backtest modal shows job queued confirmation', async ({ page }) => {
   // Wait for modal to open
   await expect(page.getByText('Run Backtest').first()).toBeVisible()
 
-  // Fill form
-  await page.fill('input[placeholder="SPY, QQQ"]', 'SPY')
-  await page.locator('input[type="date"]').nth(0).fill('2024-01-02')
-  await page.locator('input[type="date"]').nth(1).fill('2024-03-31')
+  // Fill form using data-testid selectors
+  await page.getByTestId('symbols-input').fill('SPY')
+  await page.getByTestId('start-date-input').fill('2024-01-02')
+  await page.getByTestId('end-date-input').fill('2024-03-31')
 
-  // Submit the form (the submit button inside the modal)
-  await page.locator('[type="submit"]').click()
+  // Submit the form
+  await page.getByTestId('submit-backtest').click()
 
+  await expect(page.getByTestId('job-queued-confirmation')).toBeVisible()
   await expect(page.getByText('Job queued!')).toBeVisible()
   await expect(page.getByText('test-job-123')).toBeVisible()
 })

@@ -22,7 +22,8 @@ let failedQueue: Array<{ resolve: (v: string) => void; reject: (e: unknown) => v
 function processQueue(error: unknown, token: string | null) {
   failedQueue.forEach(({ resolve, reject }) => {
     if (error) reject(error)
-    else resolve(token!)
+    else if (token) resolve(token)
+    else reject(new Error('No token available'))
   })
   failedQueue = []
 }
@@ -41,7 +42,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const { refreshToken, setAuth, clearAuth, user } = useAuthStore.getState()
+    const { refreshToken, setAuth, clearAuth } = useAuthStore.getState()
     if (!refreshToken) {
       clearAuth()
       window.location.href = '/login'
@@ -65,7 +66,14 @@ apiClient.interceptors.response.use(
         refreshToken,
       })
       const { accessToken: newAccess, refreshToken: newRefresh } = data
-      setAuth(user!, newAccess, newRefresh)
+      const currentUser = useAuthStore.getState().user
+      if (!currentUser) {
+        processQueue(new Error('Not authenticated'), null)
+        clearAuth()
+        window.location.href = '/login'
+        return Promise.reject(new Error('Not authenticated'))
+      }
+      setAuth(currentUser, newAccess, newRefresh)
       processQueue(null, newAccess)
       originalRequest.headers.Authorization = `Bearer ${newAccess}`
       return apiClient(originalRequest)

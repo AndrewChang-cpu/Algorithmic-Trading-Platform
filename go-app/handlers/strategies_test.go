@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -41,28 +44,77 @@ func seedUser(t *testing.T, email string) string {
 	return resp["userId"]
 }
 
-func TestUploadStrategy_Violations(t *testing.T) {
-	userID := seedUser(t, "strat-violations@test.com")
-
-	t.Run("422 on blocked import", func(t *testing.T) {
-		req := multipartUpload(t, "bad-strat", strategyWithOS, userID, "strat-violations@test.com")
-		rr := withAuth(UploadStrategy, req)
-		if rr.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String())
+// newFakePythonService creates a test HTTP server that mimics the Python validation service.
+// validFn is called with the source and returns (className, violation).
+func newFakePythonService(t *testing.T, validFn func(source string) (className, violation string)) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Source string `json:"source"`
 		}
-	})
-
-	t.Run("422 on missing QCAlgorithm subclass", func(t *testing.T) {
-		req := multipartUpload(t, "bad-strat2", strategyNoClass, userID, "strat-violations@test.com")
-		rr := withAuth(UploadStrategy, req)
-		if rr.Code != http.StatusUnprocessableEntity {
-			t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String())
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
+		className, violation := validFn(req.Source)
+		valid := violation == ""
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"valid":      valid,
+			"class_name": className,
+			"violation":  violation,
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestUploadStrategy_PythonServiceViolation(t *testing.T) {
+	userID := seedUser(t, "strat-pyviolation@test.com")
+
+	srv := newFakePythonService(t, func(source string) (string, string) {
+		if strings.Contains(source, "import os") {
+			return "", "import os detected on line 2"
+		}
+		return "MyStrategy", ""
 	})
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+
+	req := multipartUpload(t, "bad-strat", strategyWithOS, userID, "strat-pyviolation@test.com")
+	rr := withAuth(UploadStrategy, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body map[string]string
+	decodeJSON(t, rr, &body)
+	if !strings.Contains(body["error"], "import os") {
+		t.Errorf("expected violation text in error, got: %s", body["error"])
+	}
+}
+
+func TestUploadStrategy_PythonServiceUnreachable(t *testing.T) {
+	userID := seedUser(t, "strat-pydown@test.com")
+
+	// Point to a server that is already closed.
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closed.Close()
+	t.Setenv("PYTHON_SERVICE_URL", closed.URL)
+
+	req := multipartUpload(t, "any-strat", validStrategy, userID, "strat-pydown@test.com")
+	rr := withAuth(UploadStrategy, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
 }
 
 func TestUploadStrategy_Success(t *testing.T) {
 	userID := seedUser(t, "strat-upload@test.com")
+
+	srv := newFakePythonService(t, func(source string) (string, string) {
+		return "MyStrategy", ""
+	})
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+
 	req := multipartUpload(t, "my-strategy", validStrategy, userID, "strat-upload@test.com")
 	rr := withAuth(UploadStrategy, req)
 	if rr.Code != http.StatusCreated {
@@ -76,10 +128,31 @@ func TestUploadStrategy_Success(t *testing.T) {
 	if resp["versionNumber"] != float64(1) {
 		t.Errorf("expected versionNumber=1, got %v", resp["versionNumber"])
 	}
+	if resp["className"] != "MyStrategy" {
+		t.Errorf("expected className=MyStrategy, got %v", resp["className"])
+	}
+}
+
+func TestUploadStrategy_GetUserIDFalse(t *testing.T) {
+	// Build a request with no auth token — RequireAuth will reject it with 401.
+	var buf strings.Builder
+	fmt.Fprint(&buf, validStrategy)
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rr := httptest.NewRecorder()
+	// Call handler directly without going through RequireAuth so context has no userID.
+	UploadStrategy(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
+	}
 }
 
 func TestDeleteStrategy(t *testing.T) {
 	userID := seedUser(t, "strat-delete@test.com")
+
+	srv := newFakePythonService(t, func(source string) (string, string) {
+		return "MyStrategy", ""
+	})
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
 
 	// Upload a strategy first.
 	uploadReq := multipartUpload(t, "to-delete", validStrategy, userID, "strat-delete@test.com")
@@ -111,6 +184,11 @@ func TestDeleteStrategy(t *testing.T) {
 func TestStrategyOwnership(t *testing.T) {
 	ownerID := seedUser(t, "strat-owner@test.com")
 	otherID := seedUser(t, "strat-other@test.com")
+
+	srv := newFakePythonService(t, func(source string) (string, string) {
+		return "MyStrategy", ""
+	})
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
 
 	// Owner uploads a strategy.
 	uploadReq := multipartUpload(t, "owned-strat", validStrategy, ownerID, "strat-owner@test.com")

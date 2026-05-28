@@ -28,7 +28,7 @@ def _parse_time(t) -> datetime:
 def _milliseconds_since_midnight(dt: datetime, resolution: str) -> int:
     if resolution == "1d":
         return 0
-    return (dt.hour * 3600 + dt.minute * 60 + dt.second) * 1000
+    return (dt.hour * 3600 + dt.minute * 60 + dt.second) * 1000 + dt.microsecond // 1000
 
 
 def _scale_price(price) -> int:

@@ -44,6 +44,7 @@ export default function Register() {
               Email
             </label>
             <input
+              data-testid="register-email-input"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -64,6 +65,7 @@ export default function Register() {
               <span style={{ color: '#6e7681', fontWeight: 400 }}>(min 8 characters)</span>
             </label>
             <input
+              data-testid="register-password-input"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -80,16 +82,20 @@ export default function Register() {
           </div>
 
           {errorMsg && (
-            <div style={{
-              marginBottom: '16px', padding: '8px 12px',
-              background: '#3d1f1f', border: '1px solid #f85149',
-              borderRadius: '6px', color: '#f85149', fontSize: '12px',
-            }}>
+            <div
+              data-testid="auth-error"
+              style={{
+                marginBottom: '16px', padding: '8px 12px',
+                background: '#3d1f1f', border: '1px solid #f85149',
+                borderRadius: '6px', color: '#f85149', fontSize: '12px',
+              }}
+            >
               {errorMsg}
             </div>
           )}
 
           <button
+            data-testid="register-submit"
             type="submit"
             disabled={isPending}
             style={{

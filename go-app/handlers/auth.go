@@ -1,13 +1,18 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"application-server/db"
 	"application-server/middleware"
 	"application-server/models"
+	"application-server/queue"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -22,8 +27,37 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, models.ErrorResponse{Error: msg})
 }
 
+// checkRateLimit increments a Redis counter for the given key and returns an
+// error if the count exceeds max within window. Fails open on Redis errors so
+// that legitimate requests are not blocked when Redis is unavailable.
+func checkRateLimit(ctx context.Context, key string, max int64, window time.Duration) error {
+	rdb := queue.GetClient()
+	pipe := rdb.Pipeline()
+	incr := pipe.Incr(ctx, key)
+	pipe.ExpireNX(ctx, key, window)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil // fail open
+	}
+	if incr.Val() > max {
+		return fmt.Errorf("rate limit exceeded")
+	}
+	return nil
+}
+
 // Register handles POST /api/auth/register
 func Register(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+	if i := strings.LastIndex(clientIP, ":"); i >= 0 {
+		clientIP = clientIP[:i]
+	}
+	if err := checkRateLimit(r.Context(), "ratelimit:register:"+clientIP, 5, time.Minute); err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+
 	var req models.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -79,6 +113,18 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 // Login handles POST /api/auth/login
 func Login(w http.ResponseWriter, r *http.Request) {
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+	if i := strings.LastIndex(clientIP, ":"); i >= 0 {
+		clientIP = clientIP[:i]
+	}
+	if err := checkRateLimit(r.Context(), "ratelimit:login:"+clientIP, 10, time.Minute); err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -134,7 +180,11 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Rotate: delete old token
-	db.Pool.Exec(r.Context(), "DELETE FROM refresh_tokens WHERE token_hash=$1", tokenHash)
+	if _, err := db.Pool.Exec(r.Context(), "DELETE FROM refresh_tokens WHERE token_hash=$1", tokenHash); err != nil {
+		log.Printf("refresh token delete failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "token rotation failed")
+		return
+	}
 
 	accessToken, refreshToken, err := issueTokens(r, userID, email)
 	if err != nil {
@@ -174,7 +224,7 @@ func issueTokens(r *http.Request, userID, email string) (string, string, error) 
 	_, err = db.Pool.Exec(r.Context(), `
 		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
-	`, userID, tokenHash, time.Now().Add(7*24*time.Hour))
+	`, userID, tokenHash, time.Now().Add(24*time.Hour))
 	if err != nil {
 		return "", "", err
 	}
