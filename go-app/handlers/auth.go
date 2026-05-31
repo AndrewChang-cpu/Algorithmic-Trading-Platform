@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"application-server/db"
@@ -46,9 +47,16 @@ func checkRateLimit(ctx context.Context, key string, max int64, window time.Dura
 	return nil
 }
 
-// clientIP returns the host portion of RemoteAddr, or the raw RemoteAddr if
-// it cannot be split.
+// clientIP returns the rightmost trusted IP from the forwarding header if
+// present and valid, otherwise falls back to the host portion of RemoteAddr.
 func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		ip := strings.TrimSpace(parts[len(parts)-1])
+		if net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

@@ -341,3 +341,22 @@ def test_live_pod_startup_timeout():
                     )
 
             mock_batch_api.delete_namespaced_job.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "func,args",
+    [
+        (lambda: lean_runner.run_lean_backtest("bad", "/tmp"), None),
+        (lambda: lean_runner.run_lean_live("", "/tmp"), None),
+        (lambda: lean_runner.run_lean_backtest("not-a-uuid-at-all", "/tmp"), None),
+    ],
+)
+def test_invalid_job_id(func, args):
+    """Invalid job_id values raise ValueError before any K8s API is touched."""
+    with patch(
+        "lean_runner.k8s_client.BatchV1Api", side_effect=AssertionError("BatchV1Api should not be called")
+    ), patch(
+        "lean_runner.k8s_client.CoreV1Api", side_effect=AssertionError("CoreV1Api should not be called")
+    ):
+        with pytest.raises(ValueError, match="invalid job_id format"):
+            func()

@@ -209,15 +209,6 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check per-user connection limit
-	counterVal, _ := wsSemaphore.LoadOrStore(userID, new(int32))
-	count := atomic.AddInt32(counterVal.(*int32), 1)
-	defer atomic.AddInt32(counterVal.(*int32), -1)
-	if count > maxWSPerUser {
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "too many connections")) //nolint:errcheck
-		return
-	}
-
 	// Verify job belongs to this user
 	var ownerID string
 	err = db.Pool.QueryRow(r.Context(), `
@@ -226,8 +217,24 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 		JOIN strategies s ON sv.strategy_id = s.id
 		WHERE j.id = $1
 	`, jobID).Scan(&ownerID)
-	if err != nil || ownerID != userID {
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden")) //nolint:errcheck
+	if err != nil {
+		log.Printf("PortfolioStream: ownership query failed for job %s: %v", jobID, err)
+		conn.WriteMessage(websocket.CloseMessage, //nolint:errcheck
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "server error"))
+		return
+	}
+	if ownerID != userID {
+		conn.WriteMessage(websocket.CloseMessage, //nolint:errcheck
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden"))
+		return
+	}
+
+	// Check per-user connection limit (after auth so rejected requests do not consume slots)
+	counterVal, _ := wsSemaphore.LoadOrStore(userID, new(int32))
+	count := atomic.AddInt32(counterVal.(*int32), 1)
+	defer atomic.AddInt32(counterVal.(*int32), -1)
+	if count > maxWSPerUser {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "too many connections")) //nolint:errcheck
 		return
 	}
 

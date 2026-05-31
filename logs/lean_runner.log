@@ -1,2 +1,3 @@
 {"timestamp": "2026-05-29 16:34:46,393", "service": "lean_runner", "level": "WARNING", "message": "No Kubernetes configuration found; K8s API calls will fail at runtime"}
 {"timestamp": "2026-05-29 23:13:42,939", "service": "lean_runner", "level": "WARNING", "message": "No Kubernetes configuration found; K8s API calls will fail at runtime"}
+{"timestamp": "2026-05-31 11:40:46,438", "service": "lean_runner", "level": "WARNING", "message": "No Kubernetes configuration found; K8s API calls will fail at runtime"}

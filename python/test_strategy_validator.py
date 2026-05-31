@@ -162,3 +162,21 @@ def test_blocked_module_requests():
 def test_blocked_module_threading():
     result = validate_strategy("import threading")
     assert result["valid"] == False
+
+
+@pytest.mark.parametrize("source,expected_valid,expected_class", [
+    (
+        "class Base(QCAlgorithm): pass\nclass Real(QCAlgorithm): pass",
+        True,
+        "Real",
+    ),
+    (
+        "class MyAlgo(QCAlgorithm): pass",
+        True,
+        "MyAlgo",
+    ),
+])
+def test_multiple_qc_classes(source, expected_valid, expected_class):
+    result = validate_strategy(source)
+    assert result["valid"] is expected_valid
+    assert result["class_name"] == expected_class

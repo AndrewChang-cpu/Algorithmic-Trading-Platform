@@ -94,7 +94,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9
 app = Celery("atp", broker=REDIS_URL, backend=REDIS_URL)
 
 _UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 
 PERFORMANCE_METRICS_COLS = (
@@ -167,8 +167,9 @@ def _get_redis():
 
 def _strip_currency(v) -> float:
     s = str(v)
-    negative = s.lstrip("-") != s  # True if string starts with '-'
-    cleaned = s.replace("$", "").replace(",", "").lstrip("+-")
+    stripped = s.replace("$", "").replace(",", "").strip()
+    negative = stripped.startswith("-")
+    cleaned = stripped.lstrip("+-")
     try:
         result = float(cleaned) if cleaned else 0.0
     except ValueError:
@@ -185,16 +186,6 @@ def _sanitize_error(msg: str) -> str:
     msg = re.sub(r"/[a-zA-Z0-9_/.-]+\.py", "<path>", msg)
     return msg[:300]
 
-
-def _validate_job_id(conn, job_id: str) -> None:
-    if not _UUID_RE.match(job_id):
-        try:
-            _update_job_status(
-                conn, job_id, "failed", f"invalid job_id format: {job_id!r}"
-            )
-        except Exception:
-            pass
-        raise ValueError(f"invalid job_id format: {job_id!r}")
 
 
 def _update_job_status(conn, job_id, status, error_message=None):
@@ -450,6 +441,7 @@ def run_lean_live_task(self, job_id: str):
     job_dir = os.path.join(LEAN_JOB_TMP_DIR, job_id)
     job_name = None
     producer = None
+    _attempted_stop = False
 
     try:
         job = _fetch_job(conn, job_id)
@@ -539,6 +531,7 @@ def run_lean_live_task(self, job_id: str):
         finally:
             r.close()
 
+        _attempted_stop = True
         final_path = stop_lean_live(job_name, job_dir)
         if final_path:
             with open(final_path) as f:
@@ -551,7 +544,7 @@ def run_lean_live_task(self, job_id: str):
     except Exception as e:
         _update_job_status(conn, job_id, "failed", _sanitize_error(str(e)))
         log.error(f"Live job failed: {e}")
-        if job_name:
+        if job_name and not _attempted_stop:
             try:
                 stop_lean_live(job_name, job_dir)
             except Exception as stop_err:

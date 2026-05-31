@@ -24,5 +24,4 @@ def _set_celery_env():
     os.environ.setdefault("S3_SECRET_KEY", "test-secret-key")
     os.environ.setdefault("S3_BUCKET", "test-bucket")
     os.environ.setdefault("GO_DATA_URL", "http://localhost:8081")
-    os.environ.setdefault("KAFKA_NODE_IP", "localhost")
     os.environ.setdefault("K8S_NAMESPACE", "default")

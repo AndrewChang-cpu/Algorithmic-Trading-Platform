@@ -418,6 +418,12 @@ func CancelJob(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "database error")
 			return
 		}
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"jobId":   jobID,
+			"status":  "failed",
+			"message": "cancelled by user",
+		})
+		return // prevents falling through to "cancelling" response
 	} else {
 		if err := queue.SetStopSignal(jobID); err != nil {
 			log.Printf("CancelJob: SetStopSignal error for job %s: %v", jobID, err)

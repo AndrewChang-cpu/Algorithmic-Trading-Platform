@@ -95,12 +95,14 @@ def validate_strategy(source_code: str) -> dict:
                 "violation": f"use of blocked attribute '{node.attr}' on line {node.lineno}",
             }
 
+    qc_classes = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             for base in node.bases:
-                if isinstance(base, ast.Name) and base.id == "QCAlgorithm":
-                    return {"valid": True, "class_name": node.name}
-                if isinstance(base, ast.Attribute) and base.attr == "QCAlgorithm":
-                    return {"valid": True, "class_name": node.name}
+                if (isinstance(base, ast.Name) and base.id == "QCAlgorithm") or \
+                   (isinstance(base, ast.Attribute) and base.attr == "QCAlgorithm"):
+                    qc_classes.append(node.name)
 
-    return {"valid": False, "violation": "no QCAlgorithm subclass found"}
+    if not qc_classes:
+        return {"valid": False, "violation": "no QCAlgorithm subclass found"}
+    return {"valid": True, "class_name": qc_classes[-1]}

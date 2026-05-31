@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -42,6 +43,10 @@ except k8s_config.ConfigException:
         logger.warning(
             "No Kubernetes configuration found; K8s API calls will fail at runtime"
         )
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 
 def _get_s3():
@@ -180,6 +185,8 @@ def run_lean_backtest(job_id: str, job_dir: str, timeout_seconds: int = 7200) ->
     Raises TimeoutError if job exceeds timeout_seconds.
     Raises RuntimeError if job fails.
     """
+    if not _UUID_RE.match(job_id):
+        raise ValueError(f"invalid job_id format: {job_id!r}")
     logger.info(f"Starting backtest K8s job for job {job_id}")
 
     upload_job_inputs(job_id, job_dir)
@@ -238,6 +245,8 @@ def run_lean_live(job_id: str, job_dir: str) -> str:
 
     Returns job_name string once the pod enters Running phase (max 120s).
     """
+    if not _UUID_RE.match(job_id):
+        raise ValueError(f"invalid job_id format: {job_id!r}")
     logger.info(f"Starting live K8s job for job {job_id}")
 
     upload_job_inputs(job_id, job_dir)

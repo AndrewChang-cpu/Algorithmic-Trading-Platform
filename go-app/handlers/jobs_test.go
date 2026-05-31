@@ -299,6 +299,60 @@ func TestCancelJob_RedisError(t *testing.T) {
 	}
 }
 
+func TestCancelJob_QueuedResponse(t *testing.T) {
+	userID, versionID := seedStrategy(t, "cancel-queued-resp")
+	email := "job-user-cancel-queued-resp@test.com"
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"strategyVersionId": versionID,
+		"type":              "backtest",
+		"symbols":           []string{"SPY"},
+		"resolution":        "1d",
+		"startDate":         "2024-01-01",
+		"endDate":           "2024-03-31",
+	})
+	submitReq := authedReq(t, http.MethodPost, "/", string(body), userID, email)
+	submitRR := withAuth(SubmitJob, submitReq)
+	if submitRR.Code != http.StatusAccepted {
+		t.Fatalf("submit: expected 202, got %d", submitRR.Code)
+	}
+	var submitResp map[string]string
+	decodeJSON(t, submitRR, &submitResp)
+	jobID := submitResp["jobId"]
+
+	// Cancel the queued job.
+	req := authedReq(t, http.MethodPost, "/", "", userID, email)
+	req.SetPathValue("id", jobID)
+	rr := withAuth(CancelJob, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Response body must contain status="failed" and message="cancelled by user".
+	var resp map[string]string
+	decodeJSON(t, rr, &resp)
+	if resp["status"] != "failed" {
+		t.Errorf("expected status=failed in response body, got %q", resp["status"])
+	}
+	if resp["message"] != "cancelled by user" {
+		t.Errorf("expected message='cancelled by user' in response body, got %q", resp["message"])
+	}
+
+	// DB row must have status=failed and error_message='cancelled by user'.
+	var dbStatus, dbErrMsg string
+	if err := testPool.QueryRow(context.Background(),
+		"SELECT status, COALESCE(error_message, '') FROM jobs WHERE id=$1", jobID).
+		Scan(&dbStatus, &dbErrMsg); err != nil {
+		t.Fatalf("query job: %v", err)
+	}
+	if dbStatus != "failed" {
+		t.Errorf("expected DB status=failed, got %s", dbStatus)
+	}
+	if dbErrMsg != "cancelled by user" {
+		t.Errorf("expected DB error_message='cancelled by user', got %q", dbErrMsg)
+	}
+}
+
 func TestGetJob_DBError(t *testing.T) {
 	userID := seedUser(t, "getjob-dberr@test.com")
 

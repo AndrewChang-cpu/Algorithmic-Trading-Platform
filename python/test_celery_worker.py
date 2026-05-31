@@ -330,6 +330,24 @@ def test_lean_timeout(monkeypatch, pg_dsn, tmp_path):
     assert "timeout" in (job["error_message"] or "").lower()
 
 
+@pytest.mark.parametrize(
+    "inp, expected",
+    [
+        ("$-500.00", -500.0),
+        ("-500.00", -500.0),
+        ("$500.00", 500.0),
+        ("500.00", 500.0),
+        ("$0.00", 0.0),
+        ("", 0.0),
+        ("N/A", 0.0),
+    ],
+)
+def test_strip_currency(inp, expected):
+    import celery_worker
+
+    assert celery_worker._strip_currency(inp) == expected
+
+
 def test_invalid_uuid_no_db_call():
     import celery_worker
 
@@ -339,6 +357,60 @@ def test_invalid_uuid_no_db_call():
     ):
         with pytest.raises(ValueError):
             celery_worker.run_lean_backtest_task.run("not-a-uuid")
+
+
+@mock_aws
+def test_stop_lean_live_called_once_on_exception(monkeypatch, pg_dsn, tmp_path):
+    """If stop_lean_live raises during the normal path, the except-block must NOT retry it."""
+    import celery_worker
+
+    data = _seed(pg_dsn)
+    job_id = data["job_id"]
+
+    s3 = boto3.client(
+        "s3",
+        region_name="us-east-1",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
+    )
+    s3.create_bucket(Bucket="atp-strategies")
+    s3.put_object(
+        Bucket="atp-strategies", Key=data["s3_key"], Body=data["strategy_code"].encode()
+    )
+
+    monkeypatch.setattr(celery_worker, "DATABASE_URL", pg_dsn)
+    monkeypatch.setattr(celery_worker, "S3_ENDPOINT", None)
+    monkeypatch.setattr(celery_worker, "S3_ACCESS_KEY", "test")
+    monkeypatch.setattr(celery_worker, "S3_SECRET_KEY", "test")
+    monkeypatch.setattr(celery_worker, "S3_BUCKET", "atp-strategies")
+    monkeypatch.setattr(celery_worker, "S3_REGION", "us-east-1")
+
+    stop_mock = MagicMock(side_effect=RuntimeError("k8s 404"))
+
+    # run_lean_live returns a fake job_name so job_name is truthy
+    mock_redis = MagicMock()
+    mock_redis.get.side_effect = lambda key: b"1" if "stop" in key else None
+    mock_redis.set = MagicMock()
+    mock_redis.close = MagicMock()
+
+    with patch("celery_worker.run_lean_live", return_value="lean-live-abc"), \
+         patch("celery_worker.stop_lean_live", stop_mock), \
+         patch("celery_worker.is_container_running", return_value=False), \
+         patch("celery_worker.poll_live_results", return_value=None), \
+         patch("celery_worker._get_redis", return_value=mock_redis), \
+         patch("celery_worker.requests.post", return_value=_mock_requests_post()), \
+         patch("celery_worker._fetch_market_data", return_value={"SPY": [{"time": "2024-01-02", "open": 100, "high": 101, "low": 99, "close": 100, "volume": 1000}]}), \
+         patch("celery_worker.materialize_lean_csv"), \
+         patch("celery_worker.Producer"):
+        celery_worker.run_lean_live_task.apply(args=[job_id])
+
+    # stop_lean_live must be called exactly once (not twice)
+    assert stop_mock.call_count == 1, (
+        f"stop_lean_live was called {stop_mock.call_count} times; expected exactly 1"
+    )
+
+    job = _get_job(pg_dsn, job_id)
+    assert job["status"] == "failed", f"expected failed, got {job['status']}"
 
 
 @mock_aws

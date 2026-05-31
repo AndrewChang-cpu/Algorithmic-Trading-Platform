@@ -305,22 +305,42 @@ func TestRefreshRateLimit(t *testing.T) {
 	}
 }
 
-func TestClientIP_UsesRemoteAddr(t *testing.T) {
-	// XFF header must be ignored; only RemoteAddr is used.
+func TestClientIP_XFFPresent(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	req.RemoteAddr = "10.0.0.1:12345"
-	req.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
+	req.Header.Set("X-Forwarded-For", "203.0.113.1")
 	got := clientIP(req)
-	if got != "10.0.0.1" {
-		t.Errorf("expected 10.0.0.1 (from RemoteAddr), got %s", got)
+	if got != "203.0.113.1" {
+		t.Errorf("expected 203.0.113.1 from XFF, got %s", got)
 	}
+}
 
-	// No port in RemoteAddr: raw value returned.
-	req2 := httptest.NewRequest("GET", "/", nil)
-	req2.RemoteAddr = "10.0.0.2"
-	got2 := clientIP(req2)
-	if got2 != "10.0.0.2" {
-		t.Errorf("expected 10.0.0.2, got %s", got2)
+func TestClientIP_XFFMultiHop(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.1:12345"
+	req.Header.Set("X-Forwarded-For", "10.0.0.1, 203.0.113.1")
+	got := clientIP(req)
+	if got != "203.0.113.1" {
+		t.Errorf("expected 203.0.113.1 (rightmost) from XFF, got %s", got)
+	}
+}
+
+func TestClientIP_XFFInvalid(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.2:12345"
+	req.Header.Set("X-Forwarded-For", "not-an-ip")
+	got := clientIP(req)
+	if got != "10.0.0.2" {
+		t.Errorf("expected 10.0.0.2 (from RemoteAddr fallback), got %s", got)
+	}
+}
+
+func TestClientIP_XFFAbsent(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "10.0.0.3:12345"
+	got := clientIP(req)
+	if got != "10.0.0.3" {
+		t.Errorf("expected 10.0.0.3 (from RemoteAddr), got %s", got)
 	}
 }
 
