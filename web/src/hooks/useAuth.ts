@@ -5,7 +5,6 @@ import { useAuthStore } from '../lib/store'
 
 interface AuthResponse {
   accessToken: string
-  refreshToken: string
   userId: string
 }
 
@@ -17,7 +16,7 @@ export function useLogin() {
     mutationFn: (req: { email: string; password: string }) =>
       apiClient.post<AuthResponse>('/api/auth/login', req).then((r) => r.data),
     onSuccess: (data, req) => {
-      setAuth({ id: data.userId, email: req.email }, data.accessToken, data.refreshToken)
+      setAuth({ id: data.userId, email: req.email }, data.accessToken)
       navigate('/overview')
     },
   })
@@ -31,19 +30,19 @@ export function useRegister() {
     mutationFn: (req: { email: string; password: string }) =>
       apiClient.post<AuthResponse>('/api/auth/register', req).then((r) => r.data),
     onSuccess: (data, req) => {
-      setAuth({ id: data.userId, email: req.email }, data.accessToken, data.refreshToken)
+      setAuth({ id: data.userId, email: req.email }, data.accessToken)
       navigate('/overview')
     },
   })
 }
 
 export function useLogout() {
-  const { refreshToken, clearAuth } = useAuthStore()
+  const clearAuth = useAuthStore((s) => s.clearAuth)
   const navigate = useNavigate()
 
   return useMutation({
     mutationFn: () =>
-      apiClient.post('/api/auth/logout', { refreshToken }).then((r) => r.data),
+      apiClient.post('/api/auth/logout').then((r) => r.data),
     onSuccess: () => {
       clearAuth()
       navigate('/login')

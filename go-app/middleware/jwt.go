@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -134,7 +135,8 @@ func RequireAuth(next http.Handler) http.Handler {
 		userID, email, err := ValidateToken(tokenStr)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid or expired token"})
 			return
 		}
 

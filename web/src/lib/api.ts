@@ -1,10 +1,11 @@
 import axios from 'axios'
 import { useAuthStore } from './store'
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true,
 })
 
 // Inject access token on every request
@@ -42,12 +43,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const { refreshToken, setAuth, clearAuth } = useAuthStore.getState()
-    if (!refreshToken) {
-      clearAuth()
-      window.location.href = '/login'
-      return Promise.reject(error)
-    }
+    const { clearAuth, setAuth } = useAuthStore.getState()
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
@@ -62,10 +58,10 @@ apiClient.interceptors.response.use(
     isRefreshing = true
 
     try {
-      const { data } = await axios.post(`${BASE_URL}/api/auth/refresh`, {
-        refreshToken,
+      const { data } = await axios.post(`${BASE_URL}/api/auth/refresh`, null, {
+        withCredentials: true,
       })
-      const { accessToken: newAccess, refreshToken: newRefresh } = data
+      const { accessToken: newAccess } = data
       const currentUser = useAuthStore.getState().user
       if (!currentUser) {
         processQueue(new Error('Not authenticated'), null)
@@ -73,7 +69,7 @@ apiClient.interceptors.response.use(
         window.location.href = '/login'
         return Promise.reject(new Error('Not authenticated'))
       }
-      setAuth(currentUser, newAccess, newRefresh)
+      setAuth(currentUser, newAccess)
       processQueue(null, newAccess)
       originalRequest.headers.Authorization = `Bearer ${newAccess}`
       return apiClient(originalRequest)

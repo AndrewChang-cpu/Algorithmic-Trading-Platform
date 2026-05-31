@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -176,6 +177,26 @@ func TestGetUserID_PresentAndMissing(t *testing.T) {
 	id, ok := GetUserID(req.Context())
 	if ok || id != "" {
 		t.Errorf("expected ('', false) for bare context, got (%q, %v)", id, ok)
+	}
+}
+
+func TestRequireAuth_ErrorBodyIsGeneric(t *testing.T) {
+	setupTestKeys(t)
+	// Use an expired token to trigger the ValidateToken error path
+	token := makeToken(t, "user-123", "test@test.com", -1*time.Minute)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	RequireAuth(http.HandlerFunc(okHandler)).ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+		t.Fatalf("could not decode body: %v (raw: %s)", err, rr.Body.String())
+	}
+	if body["error"] != "invalid or expired token" {
+		t.Errorf("expected generic error, got: %q", body["error"])
 	}
 }
 

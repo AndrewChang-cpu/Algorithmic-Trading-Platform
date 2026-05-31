@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
-	"strings"
+	"os"
 	"time"
 
 	"application-server/db"
@@ -36,7 +37,8 @@ func checkRateLimit(ctx context.Context, key string, max int64, window time.Dura
 	incr := pipe.Incr(ctx, key)
 	pipe.ExpireNX(ctx, key, window)
 	if _, err := pipe.Exec(ctx); err != nil {
-		return nil // fail open
+		log.Printf("rate limit check failed (failing open) for key %s: %v", key, err)
+		return nil
 	}
 	if incr.Val() > max {
 		return fmt.Errorf("rate limit exceeded")
@@ -44,16 +46,47 @@ func checkRateLimit(ctx context.Context, key string, max int64, window time.Dura
 	return nil
 }
 
+// clientIP returns the host portion of RemoteAddr, or the raw RemoteAddr if
+// it cannot be split.
+func clientIP(r *http.Request) string {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return ip
+}
+
+// setRefreshCookie sets the refresh_token httpOnly cookie on the response.
+func setRefreshCookie(w http.ResponseWriter, token string) {
+	cookie := &http.Cookie{
+		Name:     "refresh_token",
+		Value:    token,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/api/auth",
+		MaxAge:   86400,
+	}
+	if os.Getenv("APP_ENV") == "production" {
+		cookie.Secure = true
+	}
+	http.SetCookie(w, cookie)
+}
+
+// clearRefreshCookie clears the refresh_token cookie.
+func clearRefreshCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/api/auth",
+		MaxAge:   0,
+	})
+}
+
 // Register handles POST /api/auth/register
 func Register(w http.ResponseWriter, r *http.Request) {
-	clientIP := r.Header.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = r.RemoteAddr
-	}
-	if i := strings.LastIndex(clientIP, ":"); i >= 0 {
-		clientIP = clientIP[:i]
-	}
-	if err := checkRateLimit(r.Context(), "ratelimit:register:"+clientIP, 5, time.Minute); err != nil {
+	if err := checkRateLimit(r.Context(), "ratelimit:register:"+clientIP(r), 5, time.Minute); err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
@@ -104,23 +137,16 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setRefreshCookie(w, refreshToken)
 	writeJSON(w, http.StatusCreated, map[string]string{
-		"userId":       userID,
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
+		"userId":      userID,
+		"accessToken": accessToken,
 	})
 }
 
 // Login handles POST /api/auth/login
 func Login(w http.ResponseWriter, r *http.Request) {
-	clientIP := r.Header.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = r.RemoteAddr
-	}
-	if i := strings.LastIndex(clientIP, ":"); i >= 0 {
-		clientIP = clientIP[:i]
-	}
-	if err := checkRateLimit(r.Context(), "ratelimit:login:"+clientIP, 10, time.Minute); err != nil {
+	if err := checkRateLimit(r.Context(), "ratelimit:login:"+clientIP(r), 10, time.Minute); err != nil {
 		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
@@ -151,24 +177,30 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setRefreshCookie(w, refreshToken)
 	writeJSON(w, http.StatusOK, models.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken: accessToken,
+		UserID:      userID,
 	})
 }
 
 // Refresh handles POST /api/auth/refresh
 func Refresh(w http.ResponseWriter, r *http.Request) {
-	var req models.RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+	if err := checkRateLimit(r.Context(), "ratelimit:refresh:"+clientIP(r), 20, time.Minute); err != nil {
+		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 
-	tokenHash := middleware.HashToken(req.RefreshToken)
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid or expired refresh token")
+		return
+	}
+
+	tokenHash := middleware.HashToken(cookie.Value)
 
 	var userID, email string
-	err := db.Pool.QueryRow(r.Context(), `
+	err = db.Pool.QueryRow(r.Context(), `
 		SELECT rt.user_id, u.email
 		FROM refresh_tokens rt
 		JOIN users u ON rt.user_id = u.id
@@ -192,21 +224,24 @@ func Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setRefreshCookie(w, refreshToken)
 	writeJSON(w, http.StatusOK, models.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken: accessToken,
 	})
 }
 
 // Logout handles POST /api/auth/logout
 func Logout(w http.ResponseWriter, r *http.Request) {
-	var req models.LogoutRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		// No cookie present — clear and return 204
+		clearRefreshCookie(w)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	tokenHash := middleware.HashToken(req.RefreshToken)
+	tokenHash := middleware.HashToken(cookie.Value)
 	db.Pool.Exec(r.Context(), "DELETE FROM refresh_tokens WHERE token_hash=$1", tokenHash)
+	clearRefreshCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -1,0 +1,26 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lean-job-runner
+  namespace: default
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "get", "list", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: lean-job-runner
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: lean-job-runner
+  namespace: default
+roleRef:
+  kind: Role
+  name: lean-job-runner
+  apiGroup: rbac.authorization.k8s.io

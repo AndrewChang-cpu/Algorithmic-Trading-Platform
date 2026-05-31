@@ -77,14 +77,6 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-type RefreshRequest struct {
-	RefreshToken string `json:"refreshToken"`
-}
-
-type LogoutRequest struct {
-	RefreshToken string `json:"refreshToken"`
-}
-
 type SubmitJobRequest struct {
 	StrategyVersionID string   `json:"strategyVersionId"`
 	Type              string   `json:"type"`
@@ -99,9 +91,8 @@ type SubmitJobRequest struct {
 // Response types
 
 type AuthResponse struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	UserID       string `json:"userId,omitempty"`
+	AccessToken string `json:"accessToken"`
+	UserID      string `json:"userId,omitempty"`
 }
 
 type StrategyResponse struct {

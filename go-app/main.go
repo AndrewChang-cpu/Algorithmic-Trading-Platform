@@ -42,6 +42,15 @@ func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
 	}
 }
 
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // withAuth wraps a handler with JWT authentication.
 func withAuth(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +66,7 @@ func main() {
 	if corsOrigins == "" {
 		log.Fatal("CORS_ORIGINS must be set")
 	}
+	handlers.InitAllowedOrigins(corsOrigins)
 
 	// JWT keys
 	privKey := os.Getenv("JWT_PRIVATE_KEY_PATH")
@@ -130,7 +140,7 @@ func main() {
 	mux.HandleFunc("GET /api/jobs/{id}/portfolio", withAuth(handlers.GetPortfolio))
 	mux.HandleFunc("POST /api/jobs/{id}/cancel", withAuth(handlers.CancelJob))
 
-	// WebSocket streams (auth via ?token= query param, handled inside handler)
+	// WebSocket streams: auth via first message {"type":"auth","token":"<JWT>"}
 	mux.HandleFunc("GET /api/stream/jobs/{id}", handlers.JobStatusStream)
 	mux.HandleFunc("GET /api/stream/portfolio/{jobId}", handlers.PortfolioStream)
 
@@ -141,5 +151,5 @@ func main() {
 
 	cors := corsMiddleware(corsOrigins)
 	log.Printf("go-app listening on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
+	log.Fatal(http.ListenAndServe(":"+port, securityHeaders(cors(mux))))
 }

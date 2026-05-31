@@ -1,358 +1,450 @@
-# Plan: ATP Code Quality Remediation
-> Generated: 2026-05-27
+# Plan: ATP Wave 5 — Review Blocker Resolution
+> Generated: 2026-05-29
 > Type: brownfield
 > Documents: single file
-> Archived: [PLANv1.md](archive/PLANv1.md) (original feature plan)
+> Archived: [PLANv4.md](archive/PLANv4.md) (Wave 4 — K8s Jobs migration, httpOnly cookies, WebSocket reliability, Python worker hardening)
 
 ## Overview
-**What:** A targeted remediation of security vulnerabilities, functional bugs, and code quality issues identified in a full-codebase review of the Algorithmic Trading Platform. Covers all four service layers: Go API (`go-app`), Go data service (`go-data`), Python Celery workers, and React/TypeScript frontend. Also adds a new Python FastAPI validation service and updates the Kubernetes manifests.
+**What:** Fix all 9 blockers and 12 key warnings identified by the Wave 4 post-implementation code review. No new features; no schema changes. Every change is a targeted correction to code already merged on `switch-to-lean`.
 
-**Why:** The review surfaced critical bugs (broken refresh token rotation, zombie Docker containers on timeout, fundamentally broken deduplication logic in go-data), security vulnerabilities (CORS bypass, XSS via `dangerouslySetInnerHTML`, JWT in WebSocket URL), pervasive missing error handling that causes silent data loss, and multi-tab auth race conditions.
+**Why:** The Wave 4 implementation passes tests but has concrete security vulnerabilities (S3 creds in plaintext K8s Job specs, rate limit bypass via XFF header, Dockerfile running as root, strategy validator missing sandbox escape primitives), correctness bugs (live pod startup failure is silent, DB connection leaks, `CancelJob` drops errors), and infrastructure gaps (`APP_ENV=production` missing so the `Secure` cookie flag never sets in the cluster).
 
-**Who:** Internal — no user-facing feature changes. All public API contracts and UI flows remain identical.
+**Who:** Internal — no user-visible behavior changes.
+
+---
 
 ## Definition of Done
 
-### Go backend (`go-app`)
-- [ ] `go run ./go-app/` without `CORS_ORIGINS` set exits immediately with a fatal log containing "CORS_ORIGINS must be set"
-- [ ] `go test ./go-app/handlers/ -run TestAuth/Refresh` passes a case verifying the old refresh token row is deleted before new tokens are issued; if deletion fails the handler returns 500
-- [ ] `middleware.GetUserID` has signature `func GetUserID(ctx context.Context) (string, bool)`; callers that receive `false` return HTTP 401
-- [ ] `POST /api/strategies` with `import os` in the uploaded file returns 422 with a violation message; the check calls the Python validation service via `PYTHON_SERVICE_URL`, not the inline Go string scanner
-- [ ] WebSocket connections to `/api/stream/jobs/{id}` and `/api/stream/portfolio/{id}` require the client to send `{"type":"auth","token":"<JWT>"}` as the first message within 10 seconds; invalid or missing message closes the connection; token expiry after connection is established does NOT close it
-- [ ] `GET /api/auth/login` from the same IP returns HTTP 429 after 10 attempts within 60 seconds; `POST /api/auth/register` returns 429 after 5 attempts within 60 seconds; limits are tracked in Redis
-- [ ] All `rows.Scan(...)` calls in `handlers/strategies.go`, `handlers/jobs.go`, and `handlers/stream.go` check the returned error; scan errors return 500 with a log entry
-- [ ] `rows.Err()` is checked after every iteration loop across all handlers
-- [ ] `s3client.PutObject(...)` error is checked in `UploadStrategy` and `UploadNewVersion`; if S3 upload fails, the DB row is not inserted and the handler returns 500
-- [ ] On startup, `go-app` executes `UPDATE jobs SET status='failed', error_message='Server restarted', completed_at=NOW() WHERE status='running'` before accepting requests
-- [ ] `strconv.Atoi` errors for `page` and `limit` query params return HTTP 400
-- [ ] JWT middleware rejects tokens missing `sub` or `email` claims with 401
-- [ ] `stream.go` logs a distinct error and closes the WebSocket with code 1011 when the Kafka broker returns a non-timeout error
+### A. Security Blockers
+
+- [ ] `kubectl get job <lean-job> -o yaml` on any LEAN backtest or live job shows `S3_ACCESS_KEY` and `S3_SECRET_KEY` with `valueFrom.secretKeyRef` (no `value:` field); `grep "\"value\".*ACCESS\|\"value\".*SECRET" python/lean_runner.py` → 0 matches
+- [ ] Sending `X-Forwarded-For: 1.2.3.4` to `POST /api/auth/login` 11 times from the same TCP peer triggers 429 on the 11th call; `grep "X-Forwarded-For" go-app/handlers/auth.go` → 0 lines; `go test ./go-app/handlers/ -run TestClientIP` passes
+- [ ] `kubernetes/go-app/deployment.yaml` env block contains `- name: APP_ENV` / `value: "production"`; go-app pod environment has `APP_ENV=production`; `POST /api/auth/login` response cookie includes `Secure` attribute
+- [ ] `docker build -f lean-plugin/Dockerfile lean-plugin/ -t lean-test && docker run --rm lean-test whoami` prints `lean` (non-root uid 1001)
+- [ ] `validate_strategy("().__class__.__subclasses__()")` → `{"valid": false, ...}`; `validate_strategy("import requests")` → `{"valid": false, ...}`; `validate_strategy("import threading")` → `{"valid": false, ...}`; `validate_strategy("vars()['__builtins__']")` → `{"valid": false, ...}`; `python3 -m pytest python/test_strategy_validator.py -v` passes including new test cases
+
+### B. Correctness Blockers
+
+- [ ] With `list_namespaced_pod` mocked to always return phase `Pending`: `run_lean_live` raises `RuntimeError` containing "never reached Running"; `delete_namespaced_job` is called before the raise; `python3 -m pytest python/test_lean_runner.py -k test_live_pod_startup_timeout -v` passes
+- [ ] `run_lean_backtest_task("not-a-uuid")`: raises `ValueError("invalid job_id format")` with `_get_db` never called (verified by `patch("celery_worker._get_db", side_effect=AssertionError)` — AssertionError is NOT raised); `python3 -m pytest python/test_celery_worker.py -k test_invalid_uuid_no_db_call -v` passes
+- [ ] `POST /api/jobs/<queued-job-id>/cancel` → 202; subsequent `GET /api/jobs/<id>` → `status: "failed"`, `error_message: "cancelled by user"`
+- [ ] `POST /api/jobs/<running-job-id>/cancel` when Redis is unreachable → 500 `{"error":"failed to cancel job"}`; server log contains "SetStopSignal error"
+- [ ] `go test ./go-app/handlers/ -run TestCancelJob` passes
+
+### C. Go API Corrections
+
+- [ ] `GET /api/jobs/:id` with a simulated DB error → 500 (not 404); `go test ./go-app/handlers/ -run TestGetJob_DBError` passes
+- [ ] `grep "== pgx.ErrNoRows" go-app/handlers/strategies.go` → 0 lines; all 5 ErrNoRows checks use `errors.Is`
+- [ ] Stats query failure in `GetStrategy` produces a server log entry containing "stats query error"; `go test ./go-app/handlers/ -run TestGetStrategy_StatsError` passes
+- [ ] Redis failure in `checkRateLimit` produces a `log.Printf` call; `go test ./go-app/... -run TestRateLimit_RedisError` passes
 - [ ] `go test ./go-app/...` passes
 
-### Go data service (`go-data`)
-- [ ] `POST /data/historical` for a range that has no existing rows fetches from Alpaca and inserts all bars; a second identical call does NOT call Alpaca again (`bars_ready` is returned from the DB count)
-- [ ] `POST /data/historical` for a range that has a gap (e.g., data exists for Jan and Mar but not Feb) re-fetches the full requested range from Alpaca; `ON CONFLICT DO NOTHING` prevents duplicate inserts; final `bars_ready` reflects the true DB count
-- [ ] If an INSERT within the transaction fails, the transaction is rolled back and the handler returns 500; no partial data is committed
-- [ ] The final `SELECT COUNT(*)` error is checked; if it fails the handler returns 500
-- [ ] Alpaca HTTP client has a 1-minute timeout; a hung Alpaca response does not hang the handler indefinitely
-- [ ] Migration `008_create_market_data.up.sql` includes `CREATE UNIQUE INDEX IF NOT EXISTS market_data_symbol_resolution_time_idx ON market_data (symbol, resolution, time DESC)`
-- [ ] `go test ./go-data/...` passes
+### D. Infrastructure
 
-### Python workers (`python/`)
-- [ ] `POST http://localhost:8082/validate` (new FastAPI endpoint) with a valid strategy source returns `{"valid": true, "class_name": "MyStrategy"}`; with `import os` returns `{"valid": false, "violation": "import os detected on line N"}`; running under the same Docker image as the Celery worker via supervisord
-- [ ] On `run_lean_backtest` timeout, `docker kill <container_id>` is called before raising `TimeoutError`; no zombie LEAN containers remain after a timeout
-- [ ] `INSERT INTO performance_metrics` uses a hardcoded tuple of column names, not dynamic `metrics.keys()` string interpolation
-- [ ] If LEAN's runtime statistics emit `Equity` (or any other field) as a non-string type, the Kafka message builder does not raise `AttributeError`; `isinstance(v, str)` guard applied before `.replace()`
-- [ ] `data_materializer._to_ms(datetime(2024,1,2,9,30,0,500000))` returns `34200500` (microseconds included)
-- [ ] Redis connections obtained via `_get_redis()` are explicitly closed in a `finally` block
-- [ ] Non-zero return code from `docker stop <container_id>` raises a `RuntimeError` with the container ID in the message
-- [ ] If `_fetch_market_data()` returns zero rows for any symbol, the job is immediately marked `failed` with `error_message = "No market data available for <symbol> in requested range"` before LEAN is invoked
-- [ ] `results_parser.py` uses `except (ValueError, TypeError)` instead of bare `except` in all catch blocks
-- [ ] `python3 -m pytest python/ -v` passes all existing tests
-- [ ] `python -c "import celery_worker"` imports without error
-- [ ] FastAPI service starts: `curl http://localhost:8082/health` returns 200
+- [ ] `grep "value: redis://" kubernetes/celery/celery-worker-deployment.yaml` → 0 lines; `CELERY_BROKER_URL` env uses `secretKeyRef.key: REDIS_URL` from `atp-core-credentials`
+- [ ] `grep "KAFKA_NODE_IP" python/lean_runner.py` → 0 lines; `python3 -c "import lean_runner"` succeeds without `KAFKA_NODE_IP` in env; `KAFKA_NODE_IP` env var absent from `celery-worker-deployment.yaml`
+- [ ] `poll_live_results` uses `get_paginator("list_objects_v2")`; `grep "list_objects_v2" python/lean_runner.py` → 1 line (no double-call); `python3 -m pytest python/test_lean_runner.py -k test_poll_live_results -v` passes
 
-### React frontend (`web/`)
-- [ ] After login or register, `useAuthStore.getState().user.email` equals the email submitted in the form
-- [ ] `CodeViewer.tsx` contains no `dangerouslySetInnerHTML`; syntax highlighting uses `react-syntax-highlighter` with a dark theme
-- [ ] No `!` non-null assertions on `accessToken` or `user` in `api.ts`; null cases are handled explicitly
-- [ ] Both `useJobStatus` and `usePortfolio` initialize `mountedRef` as `useRef(true)` and set `false` only in the cleanup return; no separate mount-tracking `useEffect`
-- [ ] A proactive token refresh fires at 12 minutes (80% of 15-minute lifetime); on refresh, new tokens are broadcast via `BroadcastChannel('auth')`; other open tabs receive the message and update their Zustand store without re-logging in
-- [ ] App.tsx wraps all routes in an `ErrorBoundary`; an uncaught render error shows a fallback UI with a "Reload" button instead of a blank screen
-- [ ] Every element targeted in E2E specs has a `data-testid` attribute; E2E tests use `getByTestId(...)` for those elements, not placeholder text or label text
-- [ ] `INSERT INTO refresh_tokens` sets `expires_at = NOW() + INTERVAL '24 hours'` (auth.go)
-- [ ] `StrategyDetail.tsx` `useEffect` that sets `selectedVersionId` lists only `strategy` in its dependency array, not `selectedVersionId`
-- [ ] `npm run build` exits 0 with no TypeScript errors
-- [ ] `cd web && npx playwright test` passes all 10 E2E specs
+### E. Code Quality
 
-### Kubernetes
-- [ ] `kubernetes/core/python-service.yaml` (or equivalent) contains a `ClusterIP Service` exposing port 8082 for the Python pod; go-app can reach the validation endpoint at `http://python-service:8082/validate` within the cluster
+- [ ] `python -m ruff check python/celery_worker.py` → 0 F401 findings for `tempfile` and `pathlib`
+- [ ] All module-level attribute mutations in `test_celery_worker.py` replaced with `monkeypatch.setattr`
+- [ ] `grep -E "^moto|^testcontainers" python/requirements.txt` → 2 matching lines; `pip install -r python/requirements.txt` exits 0
+- [ ] `python -m black --check python/` exits 0
+- [ ] `python3 -m pytest python/ -v` passes all tests
 
 ---
 
 ## Unchanged Behavior
-- WHEN a user submits a valid strategy THEN the system SHALL continue to return `201 {strategyId, versionId, versionNumber}` (only the validation call source changes — from inline Go to Python service)
-- WHEN a job is running THEN the WebSocket streams SHALL continue to send `{"type":"status"}` and `{"type":"log"}` / `{"type":"snapshot"}` messages in the same JSON shape
-- WHEN a backtest completes THEN `performance_metrics` and `portfolio_metrics` rows SHALL continue to be inserted with the same schema
-- WHEN a user registers or logs in THEN the response SHALL continue to include `{accessToken, refreshToken, userId}`
-- WHEN a strategy is deleted THEN cascade deletion of versions, jobs, and S3 objects SHALL continue to work
-- WHEN `POST /data/historical` is called and all data is already in the DB THEN the Alpaca API SHALL NOT be called (dedup preserved; only the gap-detection logic changes)
+
+- WHEN a user submits a valid backtest job THEN the response SHALL continue to be `202 Accepted` with `{"jobId": "<uuid>"}`
+- WHEN a backtest completes THEN `performance_metrics` and `portfolio_metrics` rows SHALL continue to be inserted
+- WHEN a user uploads a valid strategy THEN the response SHALL continue to return `201 Created`
+- WHEN a WebSocket client sends a valid first-message auth token THEN streaming SHALL continue to work
+- WHEN any REST endpoint receives `Authorization: Bearer <JWT>` THEN it SHALL continue to accept it
+- WHEN `POST /api/auth/login` succeeds THEN the response SHALL continue to set `refresh_token` as an `HttpOnly; SameSite=Lax` cookie (SameSite remains Lax — POST endpoints are equally CSRF-safe under Lax and Strict)
+- WHEN a live task is running and no stop signal is set THEN the monitoring loop SHALL continue indefinitely (no wall-clock timeout added — live strategies are intentionally unbounded)
 
 ---
 
 ## Fixes by Area
 
-### go-app: Security
+### A. Security Blockers
 
-**CORS fatal on missing env var** (`main.go`)
-- Current: logic error allows all origins when `CORS_ORIGINS` is unset
-- Fix: on startup, `log.Fatal("CORS_ORIGINS must be set")` if env var is empty
+#### A1. `lean_runner.py` — S3 credentials via secretKeyRef
 
-**JWT claims validation** (`middleware/jwt.go`)
-- Current: missing `sub` or `email` claims produce empty string, silently bypassing auth
-- Fix: return error from `RequireAuth` if either claim is absent; respond 401
+In `_build_lean_job_spec`, replace the two literal env entries with secret references. The `atp-core-credentials` secret already has `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` keys (verified from `celery-worker-deployment.yaml:27-41`).
 
-**`GetUserID` signature** (`middleware/jwt.go`)
-- Current: panics if called without `RequireAuth` in the chain
-- Fix: `func GetUserID(ctx context.Context) (string, bool)`; callers return 401 on `false`
+```python
+# Before (exposes values in kubectl get job -o yaml):
+{"name": "S3_ACCESS_KEY", "value": S3_ACCESS_KEY},
+{"name": "S3_SECRET_KEY", "value": S3_SECRET_KEY},
 
-**Remove Go inline strategy scanner** (`handlers/strategies.go`)
-- Current: string-based scan is bypassable and gives false security
-- Fix: remove `validatePythonStrategy()` and all call sites; replace with HTTP call to `PYTHON_SERVICE_URL/validate`; 422 on `valid=false`, pass `class_name` through to S3 key / DB
+# After:
+{"name": "S3_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": "atp-core-credentials", "key": "S3_ACCESS_KEY"}}},
+{"name": "S3_SECRET_KEY", "valueFrom": {"secretKeyRef": {"name": "atp-core-credentials", "key": "S3_SECRET_KEY"}}},
+```
 
-**Rate limiting** (`handlers/auth.go`, new middleware or inline)
-- Fix: Redis key `ratelimit:login:<IP>` incremented per request with 60s TTL; return 429 after 10 hits. `ratelimit:register:<IP>` same pattern, limit 5.
+The module-level `S3_ACCESS_KEY = os.environ["S3_ACCESS_KEY"]` reads remain — the Celery worker still needs them for its own boto3 client (`_get_s3()`). Only the Job spec injection changes.
 
-### go-app: Auth
+#### A2. `auth.go` — Remove XFF trust; use RemoteAddr only
 
-**Refresh token rotation** (`handlers/auth.go`)
-- Current: DELETE error is ignored; old token survives if deletion fails
-- Fix: check `db.Pool.Exec` error; if deletion fails, return 500 (do not issue new token)
+`clientIP()` currently takes the rightmost `X-Forwarded-For` entry, which any client can set. Inside Kubernetes, `r.RemoteAddr` is the actual TCP peer and cannot be spoofed.
 
-**Refresh token TTL** (`handlers/auth.go`)
-- Fix: `expires_at = NOW() + INTERVAL '24 hours'` on all `INSERT INTO refresh_tokens`
+```go
+// Before:
+func clientIP(r *http.Request) string {
+    if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+        parts := strings.Split(xff, ",")
+        return strings.TrimSpace(parts[len(parts)-1])
+    }
+    ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+    if ip == "" {
+        return r.RemoteAddr
+    }
+    return ip
+}
 
-### go-app: Error Handling
+// After:
+func clientIP(r *http.Request) string {
+    ip, _, err := net.SplitHostPort(r.RemoteAddr)
+    if err != nil {
+        return r.RemoteAddr
+    }
+    return ip
+}
+```
 
-**`rows.Scan` and `rows.Err()`** (`handlers/strategies.go`, `handlers/jobs.go`, `handlers/stream.go`)
-- Fix: check every `rows.Scan(...)` error; check `rows.Err()` after every `for rows.Next()` loop; log and return 500 on failure
+Remove `strings` import if no longer used elsewhere. Update `auth_test.go` to remove any test that asserts XFF-based IP extraction.
 
-**S3 upload error** (`handlers/strategies.go`)
-- Fix: check `s3client.PutObject(...)` error; if it fails, do not insert strategy_versions row; return 500
+#### A3. `kubernetes/go-app/deployment.yaml` — Add APP_ENV=production
 
-**`strconv.Atoi` for pagination** (`handlers/jobs.go`)
-- Fix: if `page` or `limit` parse fails, return 400 `{"error": "invalid page or limit"}`
+```yaml
+- name: APP_ENV
+  value: "production"
+```
 
-### go-app: WebSocket Auth
+Add to the `go-app` container's env block. This activates the `Secure` attribute on the `refresh_token` cookie in `auth.go:74`.
 
-**Replace query-param JWT with first-message auth** (`handlers/stream.go`)
-- Current: `?token=<JWT>` in URL exposes token to browser history and server logs
-- Fix:
-  1. Remove `?token=` extraction; do not validate JWT before upgrade
-  2. After upgrade, read first message with 10-second deadline
-  3. Expect `{"type":"auth","token":"<JWT>"}`; validate JWT; send `{"type":"auth_ok"}` or close with code 1008
-  4. If JWT expires after the session starts, keep the connection open
-  5. Remove the fake-request auth pattern (`captureWriter`, `fakeReq`)
-- Update frontend `useJobStatus` and `usePortfolio` to send auth message after connect
+#### A4. `lean-plugin/Dockerfile` — Add non-root USER
 
-**Kafka error handling** (`handlers/stream.go` — `PortfolioStream`)
-- Current: timeout errors and broker-down errors treated identically (silent continue)
-- Fix: distinguish `kafka.ErrTimedOut` (continue loop) from all other errors (log + close WebSocket with code 1011)
+The `quantconnect/lean` base image runs as root. The K8s Job spec already has `runAsNonRoot: true`, which causes pod admission failure without this fix.
 
-### go-app: Startup
+Add after the awscli install and entrypoint setup:
+```dockerfile
+RUN groupadd --gid 1001 lean && \
+    useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false lean && \
+    mkdir -p /lean/Results && \
+    chown -R lean:lean /lean /Lean/Launcher
+USER lean
+```
 
-**Live job cleanup** (`main.go`)
-- Fix: before `http.ListenAndServe`, execute:
-  ```sql
-  UPDATE jobs SET status='failed', error_message='Server restarted', completed_at=NOW() WHERE status='running'
-  ```
+The `chown` on `/lean/` is required because `entrypoint.sh` does `aws s3 sync .../input/ /lean/` and LEAN writes results to `/lean/Results/`. The `chown` on `/Lean/Launcher` is required because LEAN writes log files to its working directory.
 
----
+Note: verify `docker run --rm lean-test /Lean/Launcher/bin/Debug/Lean.Launcher --version` exits cleanly as uid=1001 before merging. If LEAN writes to other paths at runtime, add them to the `chown` list.
 
-### go-data: Deduplication Logic
+#### A5. `strategy_validator.py` — Extend blocklists
 
-**Gap-aware re-fetch** (`main.go` — `fetchAndInsert`)
-- Current: `existingCount > 0` skips Alpaca even for partial ranges
-- Fix:
-  1. Query `MIN(time), MAX(time), COUNT(*)` for the symbol+resolution+range
-  2. If `COUNT=0` OR `MIN > start_date` OR `MAX < end_date`: fetch full range from Alpaca
-  3. If all data present (min ≤ start AND max ≥ end): skip Alpaca, return DB count
-  4. `ON CONFLICT DO NOTHING` on insert handles any overlapping rows
+Add to `BLOCKED_ATTRS`:
+```python
+BLOCKED_ATTRS = {
+    "__import__", "__builtins__", "__loader__",
+    # sandbox escape via dunder chain: ().__class__.__subclasses__() or func.__globals__
+    "__class__", "__subclasses__", "__globals__", "__dict__", "__mro__",
+}
+```
 
-**Transaction rollback** (`main.go` — `fetchAndInsert`)
-- Current: INSERT error is logged and loop continues; partial data committed
-- Fix: on any INSERT error, call `tx.Rollback(ctx)` and return the error immediately
+Add to `BLOCKED_MODULES`:
+```python
+BLOCKED_MODULES = {
+    # existing ...
+    "requests", "urllib3", "http", "http.client",
+    "ftplib", "smtplib", "threading", "multiprocessing",
+    "concurrent", "asyncio",
+}
+```
 
-**Final count error check** (`main.go`)
-- Fix: check `rows.Scan` error on the final `SELECT COUNT(*)`; return error if it fails
+Add new `BLOCKED_BUILTINS` set and check for `ast.Call` nodes where the function is one of:
+```python
+BLOCKED_BUILTINS = {"vars", "globals", "locals", "dir"}
+```
 
-**Alpaca HTTP timeout** (`main.go`)
-- Fix: create `&http.Client{Timeout: 60 * time.Second}` instead of using `http.DefaultClient`
-
-### go-data: Migration
-
-**Unique index in migration 008** (`migrations/008_create_market_data.up.sql`)
-- Fix: append `CREATE UNIQUE INDEX IF NOT EXISTS market_data_symbol_resolution_time_idx ON market_data (symbol, resolution, time DESC);`
-- Corresponding `.down.sql`: `DROP INDEX IF EXISTS market_data_symbol_resolution_time_idx;`
-
----
-
-### Python: FastAPI Validation Service
-
-**New endpoint** (`python/strategy_validator.py` extended, new `python/app.py`)
-- Add `python/app.py`:
-  ```python
-  from fastapi import FastAPI
-  from pydantic import BaseModel
-  from strategy_validator import validate_strategy
-
-  app = FastAPI()
-
-  class ValidateRequest(BaseModel):
-      source: str
-
-  @app.post("/validate")
-  def validate(req: ValidateRequest):
-      return validate_strategy(req.source)
-
-  @app.get("/health")
-  def health():
-      return {"status": "ok"}
-  ```
-- Listen on port 8082 (via uvicorn in supervisord)
-- Add `fastapi`, `uvicorn[standard]` to `python/requirements.txt`
-
-**supervisord configuration** (`python/supervisord.conf`)
-- `[program:celery]`: `celery -A celery_worker worker --loglevel=info --logfile=/logs/celery.log`
-- `[program:api]`: `uvicorn app:app --host 0.0.0.0 --port 8082 --log-config /dev/null`
-- Both programs: `autostart=true`, `autorestart=true`, `stopasgroup=true`
-
-**Dockerfile update** (`python/Dockerfile`)
-- Install `supervisor`
-- `CMD ["supervisord", "-c", "/app/supervisord.conf"]`
-
-### Python: Bug Fixes
-
-**Zombie containers on timeout** (`lean_runner.py`)
-- Current: `docker ps -q --filter ...` output is discarded; containers keep running
-- Fix:
-  ```python
-  result = subprocess.run(["docker", "ps", "-q", "--filter", f"ancestor={LEAN_IMAGE}", "--filter", f"label=job_id={job_id}"], capture_output=True, text=True)
-  for cid in result.stdout.strip().splitlines():
-      subprocess.run(["docker", "kill", cid], check=False)
-  ```
-  Label containers at launch with `--label job_id={job_id}` so the filter is precise.
-
-**Hardcoded SQL column tuple** (`celery_worker.py`)
-- Replace dynamic `", ".join(metrics.keys())` with an explicit tuple constant at module level:
-  ```python
-  PERFORMANCE_METRICS_COLS = (
-      "job_id", "total_return_pct", "annual_return_pct", "sharpe_ratio", ...
-  )
-  ```
-- Build INSERT using only those columns; raise `KeyError` if any expected key is missing from `metrics`
-
-**Isinstance guard for Kafka fields** (`celery_worker.py`)
-- Fix `_build_kafka_snapshot()`:
-  ```python
-  def _strip_currency(v):
-      if isinstance(v, str):
-          return v.replace("$", "").replace(",", "").replace("-", "").lstrip("-")
-      return str(v)
-  ```
-
-**Missing microseconds in ms calculation** (`data_materializer.py`)
-- Current: `(h*3600 + m*60 + s) * 1000` drops sub-second precision
-- Fix: `(h*3600 + m*60 + s) * 1000 + dt.microsecond // 1000`
-
-**Redis connection leak** (`celery_worker.py`)
-- Fix: wrap `_get_redis()` usage in `try/finally` with `r.close()` in the `finally` block
-
-**Docker stop return code** (`lean_runner.py`)
-- Fix: `subprocess.run(["docker", "stop", container_id], check=True, timeout=30)` — `check=True` raises `CalledProcessError` on non-zero exit
-
-**Empty market data** (`celery_worker.py`)
-- Fix: after `_fetch_market_data()`, if any symbol has zero rows, immediately mark job `failed`:
-  ```python
-  for symbol, rows in rows_by_symbol.items():
-      if not rows:
-          raise ValueError(f"No market data available for {symbol} in requested range")
-  ```
-
-**Bare except clauses** (`results_parser.py`)
-- Fix: replace all bare `except:` with `except (ValueError, TypeError, KeyError):`
-
-### Python: K8s Manifest
-
-**ClusterIP Service** (`kubernetes/core/python-service.yaml`)
-- New manifest:
-  ```yaml
-  apiVersion: v1
-  kind: Service
-  metadata:
-    name: python-service
-    namespace: atp-core
-  spec:
-    selector:
-      app: celery-worker
-    ports:
-      - name: api
-        port: 8082
-        targetPort: 8082
-    type: ClusterIP
-  ```
+Add new test cases to `test_strategy_validator.py`:
+- `().__class__.__subclasses__()` → blocked (BLOCKED_ATTRS: `__class__`)
+- `vars()['__builtins__']` → blocked (BLOCKED_BUILTINS: `vars`)
+- `import requests` → blocked
+- `import threading` → blocked
 
 ---
 
-### React: Auth
+### B. Correctness Blockers
 
-**Email stored after login/register** (`web/src/hooks/useAuth.ts`)
-- Current: `setAuth({ id: data.userId, email: '' }, ...)`
-- Fix: `setAuth({ id: data.userId, email: req.email }, ...)` — capture the email from the request payload before the mutation fires
+#### B1. `lean_runner.py` — run_lean_live startup failure
 
-**Refresh token TTL** (coordinated with go-app fix above; no frontend change needed)
+Replace the open while loop with a while/else:
 
-**Proactive refresh + BroadcastChannel** (`web/src/lib/api.ts` or new `web/src/lib/tokenRefresh.ts`)
-- On `setAuth(...)`, start a `setTimeout` for 12 minutes that calls `POST /api/auth/refresh`
-- On success, call `setAuth(...)` with new tokens AND `channel.postMessage({type:'token_refresh', accessToken, refreshToken})` on `new BroadcastChannel('auth')`
-- In App.tsx (or store init), listen: `channel.onmessage = (e) => { if (e.data.type === 'token_refresh') setAuth(...) }`
-- Clear the timer on `clearAuth()`
+```python
+deadline = time.time() + 120
+while time.time() < deadline:
+    pods = k8s_client.CoreV1Api().list_namespaced_pod(
+        NAMESPACE, label_selector=f"job-name={job_name}"
+    )
+    if pods.items and pods.items[0].status.phase == "Running":
+        logger.info(f"Live job {job_name} pod is Running")
+        break
+    time.sleep(5)
+else:
+    batch_api.delete_namespaced_job(
+        job_name, NAMESPACE,
+        body=k8s_client.V1DeleteOptions(propagation_policy="Foreground"),
+    )
+    raise RuntimeError(
+        f"LEAN live pod for job {job_id} never reached Running within 120s"
+    )
+return job_name
+```
 
-**WebSocket first-message auth** (`web/src/hooks/useJobStatus.ts`, `web/src/hooks/usePortfolio.ts`)
-- After `ws.onopen`, immediately send: `ws.send(JSON.stringify({ type: 'auth', token: accessToken }))`
-- Remove `?token=...` from the WebSocket URL
+Add new test `test_live_pod_startup_timeout` to `test_lean_runner.py`: mock `list_namespaced_pod` to always return `Pending`; assert `RuntimeError` raised and `delete_namespaced_job` called.
 
-### React: Security
+#### B2. `celery_worker.py` — UUID validation before DB connection
 
-**CodeViewer XSS** (`web/src/components/strategy/CodeViewer.tsx`)
-- Remove `dangerouslySetInnerHTML` and hand-rolled regex highlighter
-- Replace with `react-syntax-highlighter` using `Prism` renderer and `vscDarkPlus` theme
-- Add `react-syntax-highlighter` and `@types/react-syntax-highlighter` to `web/package.json`
+Move the UUID format check to the top of both task functions, before `_get_db()`:
 
-### React: Correctness
+```python
+@app.task(name="atp.run_lean_backtest", bind=True)
+def run_lean_backtest_task(self, job_id: str):
+    if not _UUID_RE.match(job_id):
+        raise ValueError(f"invalid job_id format: {job_id!r}")
+    log = _logger(job_id)
+    conn = _get_db()
+    try:
+        ...
+    except Exception as e:
+        _update_job_status(conn, job_id, "failed", _sanitize_error(str(e)))
+        ...
+    finally:
+        conn.close()
+```
 
-**Non-null assertions** (`web/src/lib/api.ts`)
-- Replace `accessToken!` and `user!` with explicit null checks; throw or early-return with a meaningful error if null
+Remove the `_validate_job_id(conn, job_id)` call from both tasks (the in-function call is now redundant; the module-level `_validate_job_id` function can remain for any external callers, but the tasks no longer call it). The `_UUID_RE` pattern already exists at module level.
 
-**WebSocket hook cleanup race** (`web/src/hooks/useJobStatus.ts`, `web/src/hooks/usePortfolio.ts`)
-- Remove the separate mount-tracking `useEffect`
-- Initialize: `const mountedRef = useRef(true)`
-- Cleanup: single `useEffect(() => () => { mountedRef.current = false }, [])`
+Add new test `test_invalid_uuid_no_db_call` that patches `_get_db` with `side_effect=AssertionError` and confirms that `run_lean_backtest_task("bad")` raises `ValueError` (not `AssertionError`).
 
-**`StrategyDetail.tsx` useEffect** (`web/src/pages/StrategyDetail.tsx`)
-- Remove `selectedVersionId` from the dependency array; depend only on `strategy`
+#### B3. `jobs.go` — CancelJob: fix dropped error + add queued cancellation
 
-**Error boundary** (`web/src/components/ErrorBoundary.tsx`, `web/src/App.tsx`)
-- Create class component `ErrorBoundary` with `componentDidCatch` logging and a fallback UI: centered card with "Something went wrong" and a "Reload" button (`window.location.reload()`)
-- Wrap `<QueryClientProvider>` children in `<ErrorBoundary>` in `App.tsx`
+```go
+// Accept both running and queued:
+if status != "running" && status != "queued" {
+    writeError(w, http.StatusBadRequest, "job is not running or queued")
+    return
+}
 
-### React: E2E Tests
+if status == "queued" {
+    // Mark as failed immediately; Celery task pre-flight check handles the race
+    _, err := db.Pool.Exec(r.Context(), `
+        UPDATE jobs SET status='failed', error_message='cancelled by user',
+        completed_at=NOW() WHERE id=$1
+    `, jobID)
+    if err != nil {
+        log.Printf("CancelJob: DB update error for queued job %s: %v", jobID, err)
+        writeError(w, http.StatusInternalServerError, "database error")
+        return
+    }
+} else {
+    // running: signal stop
+    if err := queue.SetStopSignal(jobID); err != nil {
+        log.Printf("CancelJob: SetStopSignal error for job %s: %v", jobID, err)
+        writeError(w, http.StatusInternalServerError, "failed to cancel job")
+        return
+    }
+}
+writeJSON(w, http.StatusAccepted, map[string]string{
+    "jobId":  jobID,
+    "status": "cancelling",
+})
+```
 
-**`data-testid` attributes** (components + E2E specs)
-- Add `data-testid` to every element currently targeted by E2E tests in `auth.spec.ts`, `strategies.spec.ts`, `backtest.spec.ts`
-- Update all `getByPlaceholder(...)`, `getByText(...)` selectors that target form inputs or interactive controls to use `getByTestId(...)`
-- Retain `getByText` for asserting visible text content (not for finding interaction targets)
+Add pre-flight status check at the top of both Celery task functions (after `_fetch_job`):
+```python
+job = _fetch_job(conn, job_id)
+if job["status"] != "queued":
+    log.info("Job %s is in status %s, skipping (likely cancelled)", job_id, job["status"])
+    return
+```
+
+This means: if a `queued` job is cancelled between enqueueing and pickup, the task fetches the job, sees `failed`, and exits before doing any work.
+
+---
+
+### C. Go API Corrections
+
+#### C1. `jobs.go` — GetJob: distinguish 404 from 500
+
+```go
+// Before:
+if err != nil {
+    writeError(w, http.StatusNotFound, "job not found")
+    return
+}
+
+// After:
+if err != nil {
+    if errors.Is(err, pgx.ErrNoRows) {
+        writeError(w, http.StatusNotFound, "job not found")
+    } else {
+        writeError(w, http.StatusInternalServerError, "database error")
+    }
+    return
+}
+```
+
+Add test `TestGetJob_DBError` that injects a DB error and asserts 500.
+
+#### C2. `stream.go` — rows.Close() before early return
+
+The `return` on WebSocket write error at line 169 currently skips `rows.Close()` at line 175. Fix: add `rows.Close()` immediately before the `return`:
+
+```go
+if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+    rows.Close()  // prevent resource leak on client disconnect
+    return
+}
+```
+
+The existing `rows.Close()` at line 175 (after the for loop) is kept as-is for the normal exit path.
+
+#### C3. `strategies.go` — Standardize ErrNoRows checks
+
+Replace all 4 direct equality comparisons with `errors.Is`:
+```go
+// Before (4 sites: lines 202, 265, 348, 364):
+if err == pgx.ErrNoRows {
+
+// After:
+if errors.Is(err, pgx.ErrNoRows) {
+```
+
+#### C4. `strategies.go` — Log stats query error
+
+```go
+var runCount int
+var bestSharpe, avgReturn *float64
+if err := db.Pool.QueryRow(...).Scan(&runCount, &bestSharpe, &avgReturn); err != nil {
+    log.Printf("GetStrategy: stats query error for strategy %s: %v", strategyID, err)
+    // continue — partial response is acceptable
+}
+```
+
+#### C5. `auth.go` — Log rate limiter fail-open
+
+```go
+// In checkRateLimit, before `return nil`:
+if err != nil {
+    log.Printf("rate limit check failed (failing open) for key %s: %v", key, err)
+    return nil
+}
+```
+
+---
+
+### D. Infrastructure
+
+#### D1. `celery-worker-deployment.yaml` — CELERY_BROKER_URL via secret
+
+```yaml
+# Before:
+- name: CELERY_BROKER_URL
+  value: "redis://redis-service:6379/0"
+
+# After:
+- name: CELERY_BROKER_URL
+  valueFrom:
+    secretKeyRef:
+      name: atp-core-credentials
+      key: REDIS_URL
+```
+
+The `atp-core-credentials` secret already contains `REDIS_URL` (confirmed from `celery-worker-deployment.yaml:42-46`). Format is compatible with Celery's broker URL.
+
+#### D2. `lean_runner.py` + `celery-worker-deployment.yaml` — Remove unused KAFKA_NODE_IP
+
+- `lean_runner.py`: Remove line `KAFKA_NODE_IP = os.environ["KAFKA_NODE_IP"]`. The variable is never referenced in any function body; the K8s Job spec uses the hardcoded string `"kafka:9092"`.
+- `celery-worker-deployment.yaml`: Remove the `KAFKA_NODE_IP` env var block (lines 47-51). The secret key can remain in `atp-core-credentials`.
+
+#### D3. `lean_runner.py` — poll_live_results: single paginated call
+
+```python
+def poll_live_results(job_id: str) -> Optional[dict]:
+    s3 = _get_s3()
+    prefix = f"jobs/{job_id}/results/"
+    paginator = s3.get_paginator("list_objects_v2")
+    json_keys = []
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+        json_keys.extend(
+            obj["Key"] for obj in page.get("Contents", [])
+            if obj["Key"].endswith(".json")
+        )
+    if not json_keys:
+        return None
+    latest_key = sorted(json_keys)[-1]
+    buf = io.BytesIO()
+    s3.download_fileobj(S3_BUCKET, latest_key, buf)
+    buf.seek(0)
+    try:
+        return json.loads(buf.read())
+    except Exception:
+        return None
+```
+
+Eliminates the double `list_objects_v2` call (existence check + full list) and the 1000-object truncation.
+
+---
+
+### E. Code Quality
+
+#### E1. `celery_worker.py` — Remove unused imports
+
+Remove `import tempfile` and `from pathlib import Path` (ruff F401). Both were left from a prior refactor.
+
+#### E2. `test_celery_worker.py` — Replace direct attribute mutation with monkeypatch
+
+Replace all `celery_worker.X = value` direct assignments in `_run_task` with `monkeypatch.setattr(celery_worker, "X", value)`. This prevents module-level state from persisting across tests on partial failure.
+
+#### E3. `python/requirements.txt` — Add test dependencies
+
+```
+moto[s3]>=5.0
+testcontainers>=4.0
+```
+
+These are imported by `test_celery_worker.py` but missing from the requirements file, making the test suite uninstallable in CI.
+
+#### E4. Black formatting
+
+Run `python -m black python/` across all 6 Python files. No logic changes.
 
 ---
 
 ## Out of Scope
-- Password confirmation field on Register page (intentional UX decision)
-- Relative import bypass in `strategy_validator.py` (`from . import os` fails at LEAN runtime before executing)
-- WebSocket status polling optimization (deduped sends — see `TODO.md`)
-- DB polling interval reduction for `stream.go` (see `TODO.md`)
-- Rate limiting on non-auth endpoints
-- Email format validation beyond `type="email"` HTML attribute
-- Prometheus / Grafana monitoring
-- Strategy signing or S3 checksum verification
-- Concurrent backtest limits per user
-- Test coverage for Docker daemon failures, DST edge cases, or S3 partial failures
+
+- `SameSite=Strict` on refresh cookie — Wave 4 explicitly chose Lax; for POST `/api/auth/refresh`, Lax and Strict are equally CSRF-safe. No change.
+- `K8S_NAMESPACE=atp-jobs` namespace isolation for LEAN pods — real security improvement, significant RBAC/network-policy complexity. Wave 6.
+- `Content-Security-Policy` header — already Wave 4 Out of Scope (belongs on Nginx/CDN, not the JSON API server).
+- `while True` live monitoring loop timeout — intentional; live strategies run indefinitely during market hours. `is_container_running` handles pod exits; stop signal handles manual cancel.
+- Python type annotations — code quality, no correctness impact, Wave 6.
+- f-strings in logging calls — best practice, not blocking, Wave 6.
+- gVisor / Kata Containers runtime class for LEAN pods — Wave 6.
+- `go-data` service changes.
+
+---
 
 ## Assumptions
-- The Python service (`celery-worker` Deployment) already has a K8s Deployment manifest; only a Service manifest is new
-- `supervisord` is installable via `apt-get` in the `python:3.11-slim` base image
-- `PYTHON_SERVICE_URL` env var will be set in local `.env` and as a K8s secret/configmap (same pattern as `GO_DATA_URL`)
-- Alpaca's runtime statistics always emit currency fields as strings (confirmed from LEAN source `BaseResultsHandler.cs:941`)
-- `BroadcastChannel` API is available in all target browsers (Chrome, Firefox, Safari 15.4+, Edge)
+
+- `atp-core-credentials` Sealed Secret already contains keys: `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `REDIS_URL` — confirmed from existing deployment manifests.
+- The LEAN launcher writes only to `/lean/` and `/Lean/Launcher/` at runtime. If LEAN writes to other paths (e.g., `/tmp`), the `chown` list in the Dockerfile must be extended.
+- Redis has no password currently (both services use `redis://redis-service:6379/0`). If a password is added later, updating `REDIS_URL` in the secret propagates to both go-app and celery-worker automatically.
+- `queue.SetStopSignal` returns an `error` type. If the current signature is `func SetStopSignal(jobID string)` (no return), update the signature first before adding the error check in `CancelJob`.
 
 ## Open Questions
-None — all decisions resolved in planning session dated 2026-05-27.
+
+None — all decisions resolved during planning.

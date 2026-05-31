@@ -1,6 +1,10 @@
 import json
 from datetime import timezone
-from results_parser import parse_performance_metrics, parse_equity_curve, is_runtime_error
+from results_parser import (
+    parse_performance_metrics,
+    parse_equity_curve,
+    is_runtime_error,
+)
 
 # Matches structure of research/lean/lean-cli-test/My Project/backtests/.../1535553589-summary.json
 SAMPLE_RESULTS = {
@@ -45,7 +49,7 @@ SAMPLE_RESULTS = {
             "maxConsecutiveLosingTrades": 0,
             "averageMAE": "0",
             "averageMFE": "0",
-        }
+        },
     },
     "charts": {
         "Strategy Equity": {
@@ -53,18 +57,21 @@ SAMPLE_RESULTS = {
                 "Equity": {
                     "values": [
                         [1381118400, 100000.0, 100000.0, 100000.0, 100000.0],
-                        [1381377600, 99990.0, 100543.0, 98283.0, 98878.2174]
+                        [1381377600, 99990.0, 100543.0, 98283.0, 98878.2174],
                     ]
                 }
             }
         }
-    }
+    },
 }
 
 RUNTIME_ERROR_RESULTS = {
-    "state": {"Status": "RuntimeError", "RuntimeError": "Unable to locate symbol properties file"},
+    "state": {
+        "Status": "RuntimeError",
+        "RuntimeError": "Unable to locate symbol properties file",
+    },
     "totalPerformance": {"portfolioStatistics": {}, "tradeStatistics": {}},
-    "charts": {}
+    "charts": {},
 }
 
 

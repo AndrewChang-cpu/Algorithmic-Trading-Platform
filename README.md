@@ -11,13 +11,23 @@ Paper trading and backtesting platform powered by QuantConnect LEAN engine.
 
 **Local Development**:
 ```bash
-# Start infrastructure
-docker compose -f local-kafka-docker-compose.yml up -d
+# 1. Start infrastructure (Kafka KRaft, Redis, PostgreSQL, MinIO)
+docker compose -f local-docker-compose.yml up -d
 
-# Start services
+# 2. Run database migrations
+cd migrations && migrate -database "postgres://postgres:password@localhost:5432/atp?sslmode=disable" up
+
+# 3. Create MinIO bucket
+docker run --rm --network host minio/mc:latest \
+  sh -c 'mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb local/atp-strategies --ignore-existing'
+
+# 4. Create go-app/.env (if it doesn't exist)
+cp go-app/.env.example go-app/.env   # then fill in any blanks
+
+# 5. Start services (each in its own terminal)
 cd go-app && go run .
 cd python && celery -A celery_worker worker --loglevel=info
-cd web && npm run dev
+cd web && npm install && npm run dev
 ```
 
 See **[documentation/QUICK_START.md](documentation/QUICK_START.md)** for complete setup guide.
@@ -61,19 +71,17 @@ Alpaca API → go-data → Kafka → LEAN Engine → PostgreSQL → React UI
 
 ### Current
 - ✅ Real-time data ingestion (Alpaca API)
-- ✅ Kafka message bus
+- ✅ Kafka message bus (KRaft mode)
 - ✅ Celery job queue
-- ✅ Basic Backtrader strategies
+- ✅ QuantConnect LEAN engine integration
+- ✅ JWT authentication (RS256)
+- ✅ Strategy file upload (.py) to S3/MinIO
+- ✅ Backtest job submission and status tracking
+- ✅ Results dashboard (90+ metrics)
+- ✅ Equity curve charts
+- ✅ PostgreSQL + TimescaleDB storage
 
-### MVP (8 Weeks)
-- [ ] QuantConnect LEAN engine integration
-- [ ] JWT authentication
-- [ ] Strategy file upload (.py)
-- [ ] Comprehensive results dashboard (90+ metrics)
-- [ ] Interactive equity curve charts
-- [ ] PostgreSQL + TimescaleDB storage
-
-### Post-MVP
+### Planned
 - [ ] Paper trading (live mode)
 - [ ] Strategy optimization
 - [ ] Portfolio comparison
@@ -84,45 +92,56 @@ Alpaca API → go-data → Kafka → LEAN Engine → PostgreSQL → React UI
 ## Development
 
 ### Local Setup
+
+**Prerequisites**: Docker, Go 1.22+, Python 3.11+, Node 20+, [golang-migrate](https://github.com/golang-migrate/migrate)
+
 ```bash
-# 1. Start infrastructure (Kafka, Zookeeper, Redis)
-docker compose -f local-kafka-docker-compose.yml up -d
+# 1. Start infrastructure (Kafka KRaft, Redis, PostgreSQL/TimescaleDB, MinIO)
+docker compose -f local-docker-compose.yml up -d
 
-# 2. Start PostgreSQL (local)
-docker run -d -p 5432:5432 \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=atp \
-  timescale/timescaledb:latest-pg14
-
-# 3. Run migrations
+# 2. Run database migrations
 cd migrations && migrate -database "postgres://postgres:password@localhost:5432/atp?sslmode=disable" up
 
-# 4. Start Go API
+# 3. Create MinIO strategy bucket (first time only)
+docker run --rm --network host minio/mc:latest \
+  sh -c 'mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb local/atp-strategies --ignore-existing'
+
+# 4. Configure go-app environment
+cat > go-app/.env <<'EOF'
+CORS_ORIGINS=http://localhost:5173
+DATABASE_URL=postgres://postgres:password@localhost:5432/atp?sslmode=disable
+REDIS_URL=redis://localhost:6379/0
+S3_ENDPOINT=http://localhost:9000
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
+S3_BUCKET=atp-strategies
+S3_REGION=us-east-1
+EOF
+
+# 5. Start Go API
 cd go-app && go run .
 
-# 5. Start Celery worker
+# 6. Start Celery worker
 cd python && celery -A celery_worker worker --loglevel=info
 
-# 6. Start frontend
-cd web && npm run dev
+# 7. Start frontend
+cd web && npm install && npm run dev
 ```
 
 ### Useful Commands
 
 #### Kafka
 ```bash
-# Test consumer
-docker exec -it <kafka-container> /bin/sh
-kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic stock_data --from-beginning
+# Get the kafka container name
+docker compose -f local-docker-compose.yml ps
+
+# Test consumer (stock data)
+docker exec -it <kafka-container> kafka-console-consumer \
+  --bootstrap-server localhost:9092 --topic stock_data --from-beginning
 
 # List topics
-kafka-topics.sh --bootstrap-server localhost:9092 --list
-
-# Create topic
-kafka-topics.sh --bootstrap-server localhost:9092 --create --topic stock_data --partitions 1 --replication-factor 1
-
-# Delete topic
-kafka-topics.sh --bootstrap-server localhost:9092 --delete --topic stock_data
+docker exec -it <kafka-container> kafka-topics \
+  --bootstrap-server localhost:9092 --list
 ```
 
 #### Kubernetes

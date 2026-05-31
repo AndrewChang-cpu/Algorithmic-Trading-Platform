@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +16,8 @@ import (
 	"application-server/middleware"
 	"application-server/models"
 	s3client "application-server/s3"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // validateWithPythonService calls the Python validation service to check strategy source.
@@ -155,10 +158,6 @@ func UploadStrategy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s3Key := fmt.Sprintf("%s/%s/v1/main.py", userID, strategyID)
-	if err := s3client.PutObject(r.Context(), s3Key, data, "text/x-python"); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to upload strategy")
-		return
-	}
 
 	var versionID string
 	err = db.Pool.QueryRow(r.Context(),
@@ -167,6 +166,12 @@ func UploadStrategy(w http.ResponseWriter, r *http.Request) {
 	).Scan(&versionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "creating version")
+		return
+	}
+
+	if err := s3client.PutObject(r.Context(), s3Key, data, "text/x-python"); err != nil {
+		db.Pool.Exec(r.Context(), "DELETE FROM strategy_versions WHERE id=$1", versionID) //nolint:errcheck
+		writeError(w, http.StatusInternalServerError, "failed to upload strategy")
 		return
 	}
 
@@ -188,26 +193,31 @@ func GetStrategy(w http.ResponseWriter, r *http.Request) {
 	strategyID := r.PathValue("id")
 
 	var s models.StrategyResponse
+	var ownerID string
 	err := db.Pool.QueryRow(r.Context(), `
-		SELECT s.id, s.name, COALESCE(s.description, ''), s.created_at
+		SELECT s.id, s.name, COALESCE(s.description, ''), s.created_at, s.user_id
 		FROM strategies s
 		WHERE s.id = $1
-	`, strategyID).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedAt)
-	if err != nil {
+	`, strategyID).Scan(&s.ID, &s.Name, &s.Description, &s.CreatedAt, &ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "strategy not found")
 		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
 	}
-
-	var ownerID string
-	db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID)
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
-	rows, _ := db.Pool.Query(r.Context(),
+	rows, err := db.Pool.Query(r.Context(),
 		"SELECT id, version_number, created_at FROM strategy_versions WHERE strategy_id=$1 ORDER BY version_number DESC",
 		strategyID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
+		return
+	}
 	defer rows.Close()
 	for rows.Next() {
 		var v models.StrategyVersionResponse
@@ -228,13 +238,16 @@ func GetStrategy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var stats models.StrategyStats
-	db.Pool.QueryRow(r.Context(), `
+	if err := db.Pool.QueryRow(r.Context(), `
 		SELECT COUNT(j.id), MAX(pm.sharpe_ratio), AVG(pm.total_return_pct)
 		FROM jobs j
 		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
 		LEFT JOIN performance_metrics pm ON pm.job_id = j.id
 		WHERE sv.strategy_id = $1
-	`, strategyID).Scan(&stats.RunCount, &stats.BestSharpe, &stats.AvgReturn)
+	`, strategyID).Scan(&stats.RunCount, &stats.BestSharpe, &stats.AvgReturn); err != nil {
+		log.Printf("GetStrategy: stats query error for strategy %s: %v", strategyID, err)
+		// continue — partial response with zero stats is acceptable
+	}
 	s.Stats = &stats
 
 	writeJSON(w, http.StatusOK, s)
@@ -250,7 +263,15 @@ func UploadNewVersion(w http.ResponseWriter, r *http.Request) {
 	strategyID := r.PathValue("id")
 
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID)
+	err := db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "strategy not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -285,21 +306,29 @@ func UploadNewVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var nextVersion int
-	db.Pool.QueryRow(r.Context(),
+	if err := db.Pool.QueryRow(r.Context(),
 		"SELECT COALESCE(MAX(version_number),0)+1 FROM strategy_versions WHERE strategy_id=$1",
-		strategyID).Scan(&nextVersion)
-
-	s3Key := fmt.Sprintf("%s/%s/v%d/main.py", userID, strategyID, nextVersion)
-	if err := s3client.PutObject(r.Context(), s3Key, data, "text/x-python"); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to upload strategy")
+		strategyID).Scan(&nextVersion); err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 
+	s3Key := fmt.Sprintf("%s/%s/v%d/main.py", userID, strategyID, nextVersion)
+
 	var versionID string
-	db.Pool.QueryRow(r.Context(),
+	if err := db.Pool.QueryRow(r.Context(),
 		"INSERT INTO strategy_versions (strategy_id, version_number, s3_key) VALUES ($1,$2,$3) RETURNING id",
 		strategyID, nextVersion, s3Key,
-	).Scan(&versionID)
+	).Scan(&versionID); err != nil {
+		writeError(w, http.StatusInternalServerError, "creating version")
+		return
+	}
+
+	if err := s3client.PutObject(r.Context(), s3Key, data, "text/x-python"); err != nil {
+		db.Pool.Exec(r.Context(), "DELETE FROM strategy_versions WHERE id=$1", versionID) //nolint:errcheck
+		writeError(w, http.StatusInternalServerError, "failed to upload strategy")
+		return
+	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"versionId":     versionID,
@@ -318,18 +347,28 @@ func GetVersionCode(w http.ResponseWriter, r *http.Request) {
 	versionID := r.PathValue("versionId")
 
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID)
+	if err := db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "strategy not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 
 	var s3Key string
-	db.Pool.QueryRow(r.Context(),
+	if err := db.Pool.QueryRow(r.Context(),
 		"SELECT s3_key FROM strategy_versions WHERE id=$1 AND strategy_id=$2",
-		versionID, strategyID).Scan(&s3Key)
-	if s3Key == "" {
-		writeError(w, http.StatusNotFound, "version not found")
+		versionID, strategyID).Scan(&s3Key); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "version not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
 		return
 	}
 
@@ -351,9 +390,12 @@ func DeleteStrategy(w http.ResponseWriter, r *http.Request) {
 	strategyID := r.PathValue("id")
 
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID)
-	if ownerID == "" {
-		writeError(w, http.StatusNotFound, "strategy not found")
+	if err := db.Pool.QueryRow(r.Context(), "SELECT user_id FROM strategies WHERE id=$1", strategyID).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "strategy not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
 		return
 	}
 	if ownerID != userID {

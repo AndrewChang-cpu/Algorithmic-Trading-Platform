@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"application-server/middleware"
 	"application-server/models"
 	"application-server/queue"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // SubmitJob handles POST /api/jobs
@@ -35,11 +38,18 @@ func SubmitJob(w http.ResponseWriter, r *http.Request) {
 
 	// Verify strategy_version belongs to this user
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), `
+	if err := db.Pool.QueryRow(r.Context(), `
 		SELECT s.user_id FROM strategy_versions sv
 		JOIN strategies s ON sv.strategy_id = s.id
 		WHERE sv.id = $1
-	`, req.StrategyVersionID).Scan(&ownerID)
+	`, req.StrategyVersionID).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "strategy version not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "strategy version not found or not owned by user")
 		return
@@ -70,10 +80,18 @@ func SubmitJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var enqueueErr error
 	if req.Type == "live" {
-		queue.EnqueueLive(jobID)
+		enqueueErr = queue.EnqueueLive(jobID)
 	} else {
-		queue.EnqueueBacktest(jobID)
+		enqueueErr = queue.EnqueueBacktest(jobID)
+	}
+	if enqueueErr != nil {
+		db.Pool.Exec(r.Context(),
+			"UPDATE jobs SET status='failed', error_message=$1, completed_at=NOW() WHERE id=$2",
+			"failed to queue job: "+enqueueErr.Error(), jobID)
+		writeError(w, http.StatusInternalServerError, "failed to queue job")
+		return
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": jobID})
@@ -111,7 +129,11 @@ func GetJob(w http.ResponseWriter, r *http.Request) {
 		&ownerID,
 	)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "job not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "job not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
 		return
 	}
 	if ownerID != userID {
@@ -144,8 +166,8 @@ func ListJobs(w http.ResponseWriter, r *http.Request) {
 	if limitStr := q.Get("limit"); limitStr != "" {
 		var err error
 		limit, err = strconv.Atoi(limitStr)
-		if err != nil || limit < 1 {
-			writeError(w, http.StatusBadRequest, "invalid page or limit parameter")
+		if err != nil || limit < 1 || limit > 200 {
+			writeError(w, http.StatusBadRequest, "limit must be between 1 and 200")
 			return
 		}
 	}
@@ -240,12 +262,19 @@ func GetJobMetrics(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
 
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), `
+	if err := db.Pool.QueryRow(r.Context(), `
 		SELECT s.user_id FROM jobs j
 		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
 		JOIN strategies s ON sv.strategy_id = s.id
 		WHERE j.id = $1
-	`, jobID).Scan(&ownerID)
+	`, jobID).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "job not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -254,14 +283,22 @@ func GetJobMetrics(w http.ResponseWriter, r *http.Request) {
 	// Return all columns from performance_metrics as a map.
 	rows, err := db.Pool.Query(r.Context(),
 		"SELECT * FROM performance_metrics WHERE job_id = $1", jobID)
-	if err != nil || !rows.Next() {
-		writeError(w, http.StatusNotFound, "metrics not available yet")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "database error")
 		return
 	}
 	defer rows.Close()
+	if !rows.Next() {
+		writeError(w, http.StatusNotFound, "metrics not available yet")
+		return
+	}
 
 	fieldDescriptions := rows.FieldDescriptions()
-	vals, _ := rows.Values()
+	vals, err := rows.Values()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reading metrics")
+		return
+	}
 	result := make(map[string]interface{})
 	for i, fd := range fieldDescriptions {
 		result[string(fd.Name)] = vals[i]
@@ -279,12 +316,19 @@ func GetPortfolio(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
 
 	var ownerID string
-	db.Pool.QueryRow(r.Context(), `
+	if err := db.Pool.QueryRow(r.Context(), `
 		SELECT s.user_id FROM jobs j
 		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
 		JOIN strategies s ON sv.strategy_id = s.id
 		WHERE j.id = $1
-	`, jobID).Scan(&ownerID)
+	`, jobID).Scan(&ownerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "job not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
@@ -343,23 +387,44 @@ func CancelJob(w http.ResponseWriter, r *http.Request) {
 	jobID := r.PathValue("id")
 
 	var ownerID, status string
-	db.Pool.QueryRow(r.Context(), `
+	if err := db.Pool.QueryRow(r.Context(), `
 		SELECT s.user_id, j.status FROM jobs j
 		JOIN strategy_versions sv ON j.strategy_version_id = sv.id
 		JOIN strategies s ON sv.strategy_id = s.id
 		WHERE j.id = $1
-	`, jobID).Scan(&ownerID, &status)
-
+	`, jobID).Scan(&ownerID, &status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "job not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "database error")
+		}
+		return
+	}
 	if ownerID != userID {
 		writeError(w, http.StatusNotFound, "job not found")
 		return
 	}
-	if status != "running" {
-		writeError(w, http.StatusBadRequest, "job is not running")
+	if status != "running" && status != "queued" {
+		writeError(w, http.StatusBadRequest, "job is not running or queued")
 		return
 	}
-
-	queue.SetStopSignal(jobID)
+	if status == "queued" {
+		_, err := db.Pool.Exec(r.Context(), `
+			UPDATE jobs SET status='failed', error_message='cancelled by user',
+			completed_at=NOW() WHERE id=$1
+		`, jobID)
+		if err != nil {
+			log.Printf("CancelJob: DB update error for queued job %s: %v", jobID, err)
+			writeError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+	} else {
+		if err := queue.SetStopSignal(jobID); err != nil {
+			log.Printf("CancelJob: SetStopSignal error for job %s: %v", jobID, err)
+			writeError(w, http.StatusInternalServerError, "failed to cancel job")
+			return
+		}
+	}
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"jobId":  jobID,
 		"status": "cancelling",

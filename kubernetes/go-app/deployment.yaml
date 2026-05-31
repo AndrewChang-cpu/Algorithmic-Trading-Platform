@@ -19,16 +19,70 @@ spec:
         image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/go-app:latest
         ports:
         - containerPort: 8080
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: DATABASE_URL
+        - name: JWT_PRIVATE_KEY_PATH
+          value: "/etc/jwt/private.pem"
+        - name: JWT_PUBLIC_KEY_PATH
+          value: "/etc/jwt/public.pem"
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_ACCESS_KEY
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_SECRET_KEY
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_BUCKET
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: REDIS_URL
+        - name: CORS_ORIGINS
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: CORS_ORIGINS
+        - name: PYTHON_SERVICE_URL
+          value: "http://python-service:8082"
+        - name: APP_ENV
+          value: "production"
         livenessProbe:
           httpGet:
-            path: /test
+            path: /api/health
             port: 8080
           initialDelaySeconds: 10
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /test
+            path: /api/health
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+        - name: jwt-keypair
+          mountPath: /etc/jwt
+          readOnly: true
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: jwt-keypair
+        secret:
+          secretName: jwt-keypair
       restartPolicy: Always

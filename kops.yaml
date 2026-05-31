@@ -110,3 +110,24 @@ spec:
     dedicated: kafka
   taints:
   - dedicated=kafka:NoSchedule
+---
+apiVersion: kops.k8s.io/v1alpha2
+kind: InstanceGroup
+metadata:
+  name: lean-nodes
+  labels:
+    kops.k8s.io/cluster: k8s.andrw.tech
+spec:
+  role: Node
+  machineType: t3.medium
+  minSize: 0
+  maxSize: 3
+  zones:
+  - us-east-1a
+  subnets:
+  - us-east-1a
+  taints:
+  - dedicated=lean-worker:NoSchedule
+  nodeLabels:
+    node-role.kubernetes.io/node: ""
+    dedicated: lean-worker

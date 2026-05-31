@@ -1,116 +1,343 @@
 import json
 import os
-import subprocess
-from unittest.mock import MagicMock, call, patch
+import tempfile
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-os.environ["LEAN_IMAGE"] = "lean-atp:latest"
+# Set required env vars before importing lean_runner
+os.environ.setdefault("S3_BUCKET", "test-bucket")
+os.environ.setdefault("S3_ACCESS_KEY", "test-key")
+os.environ.setdefault("S3_SECRET_KEY", "test-secret")
+os.environ.setdefault("K8S_NAMESPACE", "default")
 
-import lean_runner
-
-
-def test_run_lean_backtest_success(tmp_path):
-    results_dir = tmp_path / "Results"
-    results_dir.mkdir()
-    results_file = results_dir / "result.json"
-    results_file.write_text("{}")
-
-    mock_result = MagicMock(returncode=0, stdout="", stderr="")
-    with patch("lean_runner.subprocess.run", return_value=mock_result):
-        path = lean_runner.run_lean_backtest("job-1", str(tmp_path))
-
-    assert path.endswith(".json")
-    assert os.path.exists(path)
+import lean_runner  # noqa: E402
 
 
-def test_run_lean_backtest_timeout(tmp_path):
-    def side_effect(cmd, **kwargs):
-        if cmd[0:2] == ["docker", "run"]:
-            raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
-        return MagicMock(returncode=0)
+def test_run_lean_backtest_success():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_job = MagicMock()
+        mock_job.status.succeeded = 1
+        mock_job.status.failed = 0
 
-    with patch("lean_runner.subprocess.run", side_effect=side_effect):
-        with pytest.raises(TimeoutError):
-            lean_runner.run_lean_backtest("job-2", str(tmp_path), timeout_seconds=1)
+        with patch("lean_runner.k8s_client.BatchV1Api") as mock_batch, patch(
+            "lean_runner.k8s_client.CoreV1Api"
+        ), patch("lean_runner.upload_job_inputs"), patch(
+            "lean_runner.download_job_results"
+        ) as mock_download:
 
+            mock_batch_api = MagicMock()
+            mock_batch.return_value = mock_batch_api
+            mock_batch_api.read_namespaced_job.return_value = mock_job
 
-def test_run_lean_backtest_nonzero_exit(tmp_path):
-    mock_result = MagicMock(returncode=1, stderr="something went wrong")
-    with patch("lean_runner.subprocess.run", return_value=mock_result):
-        with pytest.raises(RuntimeError):
-            lean_runner.run_lean_backtest("job-3", str(tmp_path))
+            def fake_download(job_id, dest_dir):
+                os.makedirs(dest_dir, exist_ok=True)
+                with open(os.path.join(dest_dir, "result-summary.json"), "w") as f:
+                    json.dump({"state": {"Status": "Completed"}}, f)
 
+            mock_download.side_effect = fake_download
 
-def test_run_lean_live_returns_container_id(tmp_path):
-    mock_result = MagicMock(returncode=0, stdout="abc123def456\n")
-    with patch("lean_runner.subprocess.run", return_value=mock_result):
-        container_id = lean_runner.run_lean_live("job-4", str(tmp_path))
+            result = lean_runner.run_lean_backtest(
+                "abcdef12-1234-1234-1234-123456789abc", tmpdir, timeout_seconds=60
+            )
 
-    assert container_id == "abc123def456"
-
-
-def test_stop_lean_live(tmp_path):
-    results_dir = tmp_path / "Results"
-    results_dir.mkdir()
-    results_file = results_dir / "final-summary.json"
-    results_file.write_text(json.dumps({"state": "done"}))
-
-    mock_result = MagicMock(returncode=0)
-    with patch("lean_runner.subprocess.run", return_value=mock_result) as mock_run:
-        path = lean_runner.stop_lean_live("some-id", str(tmp_path))
-
-    assert path is not None
-    assert path.endswith(".json")
-    mock_run.assert_called_once_with(
-        ["docker", "stop", "--time", "30", "some-id"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+            assert result.endswith(".json")
+            mock_batch_api.create_namespaced_job.assert_called_once()
 
 
-def test_poll_live_results_none(tmp_path):
-    result = lean_runner.poll_live_results(str(tmp_path))
+def test_run_lean_backtest_timeout():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_job = MagicMock()
+        mock_job.status.succeeded = 0
+        mock_job.status.failed = 0
+
+        with patch("lean_runner.k8s_client.BatchV1Api") as mock_batch, patch(
+            "lean_runner.k8s_client.CoreV1Api"
+        ), patch("lean_runner.upload_job_inputs"), patch("lean_runner.time.sleep"):
+
+            mock_batch_api = MagicMock()
+            mock_batch.return_value = mock_batch_api
+            mock_batch_api.read_namespaced_job.return_value = mock_job
+
+            import time
+
+            original_time = time.time
+            call_count = [0]
+
+            def fake_time():
+                call_count[0] += 1
+                if call_count[0] > 3:
+                    return original_time() + 10000  # simulate past deadline
+                return original_time()
+
+            with patch("lean_runner.time.time", side_effect=fake_time):
+                with pytest.raises(TimeoutError):
+                    lean_runner.run_lean_backtest(
+                        "abcdef12-1234-1234-1234-123456789abc",
+                        tmpdir,
+                        timeout_seconds=1,
+                    )
+
+            mock_batch_api.delete_namespaced_job.assert_called_once()
+
+
+def test_backtest_timeout_kills_all_containers():
+    """Renamed from Docker version: verifies K8s job is deleted on timeout."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_job = MagicMock()
+        mock_job.status.succeeded = 0
+        mock_job.status.failed = 0
+
+        mock_delete_result = MagicMock()
+        mock_delete_result.returncode = 1  # returncode=1 as specified in plan
+
+        with patch("lean_runner.k8s_client.BatchV1Api") as mock_batch, patch(
+            "lean_runner.k8s_client.CoreV1Api"
+        ), patch("lean_runner.upload_job_inputs"), patch(
+            "lean_runner.time.sleep"
+        ), patch(
+            "lean_runner.logger"
+        ) as mock_logger:
+
+            mock_batch_api = MagicMock()
+            mock_batch.return_value = mock_batch_api
+            mock_batch_api.read_namespaced_job.return_value = mock_job
+            mock_batch_api.delete_namespaced_job.return_value = mock_delete_result
+
+            import time
+
+            original_time = time.time
+            call_count = [0]
+
+            def fake_time():
+                call_count[0] += 1
+                return original_time() + call_count[0] * 10000
+
+            with patch("lean_runner.time.time", side_effect=fake_time):
+                with pytest.raises(TimeoutError) as exc_info:
+                    lean_runner.run_lean_backtest(
+                        "abcdef12-1234-1234-1234-123456789abc",
+                        tmpdir,
+                        timeout_seconds=1,
+                    )
+
+            assert "timed out" in str(exc_info.value).lower()
+            mock_batch_api.delete_namespaced_job.assert_called_once()
+
+
+def test_is_container_running():
+    with patch("lean_runner.k8s_client.CoreV1Api") as mock_core:
+        mock_core_api = MagicMock()
+        mock_core.return_value = mock_core_api
+
+        # Running pod
+        mock_pod = MagicMock()
+        mock_pod.status.phase = "Running"
+        mock_core_api.list_namespaced_pod.return_value.items = [mock_pod]
+        assert lean_runner.is_container_running("lean-live-abcdef12") is True
+
+        # No pods
+        mock_core_api.list_namespaced_pod.return_value.items = []
+        assert lean_runner.is_container_running("lean-live-abcdef12") is False
+
+        # Pending pod (not Running)
+        mock_pod2 = MagicMock()
+        mock_pod2.status.phase = "Pending"
+        mock_core_api.list_namespaced_pod.return_value.items = [mock_pod2]
+        assert lean_runner.is_container_running("lean-live-abcdef12") is False
+
+
+def test_upload_job_inputs():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create some test files
+        os.makedirs(os.path.join(tmpdir, "algorithm"))
+        with open(os.path.join(tmpdir, "algorithm", "main.py"), "w") as f:
+            f.write("class MyStrategy: pass")
+        with open(os.path.join(tmpdir, "config.json"), "w") as f:
+            json.dump({"environment": "backtesting"}, f)
+
+        mock_s3 = MagicMock()
+        with patch("lean_runner._get_s3", return_value=mock_s3):
+            lean_runner.upload_job_inputs("test-job-id", tmpdir)
+
+        # Should have called upload_file for each file
+        assert mock_s3.upload_file.call_count == 2
+        # Verify the bucket arg (second positional arg) is always the configured bucket
+        call_args = [c[0][1] for c in mock_s3.upload_file.call_args_list]
+        assert all(a == lean_runner.S3_BUCKET for a in call_args)
+
+
+def _make_paginator(pages: list) -> MagicMock:
+    """Helper: build a mock paginator that yields the given pages."""
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = iter(pages)
+    return mock_paginator
+
+
+def test_poll_live_results_none():
+    """poll_live_results returns None when no objects exist in S3."""
+    mock_s3 = MagicMock()
+    mock_s3.get_paginator.return_value = _make_paginator([{"Contents": []}])
+
+    with patch("lean_runner._get_s3", return_value=mock_s3):
+        result = lean_runner.poll_live_results("test-job-id")
+
     assert result is None
 
 
-def test_poll_live_results_returns_dict(tmp_path):
-    results_dir = tmp_path / "Results"
-    results_dir.mkdir()
-    results_file = results_dir / "snapshot.json"
-    results_file.write_text(json.dumps({"equity": 10000}))
+def test_poll_live_results_no_json_files():
+    """poll_live_results returns None when S3 objects exist but none are .json."""
+    mock_s3 = MagicMock()
+    mock_s3.get_paginator.return_value = _make_paginator(
+        [{"Contents": [{"Key": "jobs/test-job-id/results/output.csv"}]}]
+    )
 
-    result = lean_runner.poll_live_results(str(tmp_path))
-    assert result == {"equity": 10000}
+    with patch("lean_runner._get_s3", return_value=mock_s3):
+        result = lean_runner.poll_live_results("test-job-id")
 
-
-def test_timeout_kills_container(tmp_path):
-    """Timeout handler must find the container by job label and docker kill it."""
-    container_id = "deadbeef1234"
-
-    def side_effect(cmd, **kwargs):
-        if cmd[0:2] == ["docker", "run"]:
-            raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
-        if cmd[0:4] == ["docker", "ps", "-q", "--filter"]:
-            return MagicMock(returncode=0, stdout=f"{container_id}\n")
-        # docker kill
-        return MagicMock(returncode=0, stdout="")
-
-    with patch("lean_runner.subprocess.run", side_effect=side_effect) as mock_run:
-        with pytest.raises(TimeoutError):
-            lean_runner.run_lean_backtest("job-timeout", str(tmp_path), timeout_seconds=1)
-
-    kill_calls = [c for c in mock_run.call_args_list if c.args[0][0:2] == ["docker", "kill"]]
-    assert len(kill_calls) == 1
-    assert kill_calls[0].args[0] == ["docker", "kill", container_id]
+    assert result is None
 
 
-def test_stop_lean_live_raises_on_failure(tmp_path):
-    """stop_lean_live must propagate CalledProcessError when docker stop fails."""
-    with patch(
-        "lean_runner.subprocess.run",
-        side_effect=subprocess.CalledProcessError(1, "docker stop"),
-    ):
-        with pytest.raises(subprocess.CalledProcessError):
-            lean_runner.stop_lean_live("bad-container-id", str(tmp_path))
+def test_poll_live_results_returns_dict():
+    """poll_live_results parses and returns the latest JSON from S3."""
+    import io as _io
+
+    payload = {"equity": 10000}
+    mock_s3 = MagicMock()
+    mock_s3.get_paginator.return_value = _make_paginator(
+        [{"Contents": [{"Key": "jobs/test-job-id/results/snapshot.json"}]}]
+    )
+
+    buf = _io.BytesIO(json.dumps(payload).encode())
+
+    def fake_download_fileobj(bucket, key, fileobj):
+        fileobj.write(buf.getvalue())
+
+    mock_s3.download_fileobj.side_effect = fake_download_fileobj
+
+    with patch("lean_runner._get_s3", return_value=mock_s3):
+        result = lean_runner.poll_live_results("test-job-id")
+
+    assert result == payload
+
+
+def test_poll_live_results_returns_latest():
+    """poll_live_results returns the alphabetically last .json key."""
+    import io as _io
+
+    payload = {"equity": 99999}
+    mock_s3 = MagicMock()
+    # Two pages, multiple .json keys; latest alphabetically is snapshot_z.json
+    mock_s3.get_paginator.return_value = _make_paginator(
+        [
+            {
+                "Contents": [
+                    {"Key": "jobs/test-job-id/results/snapshot_a.json"},
+                    {"Key": "jobs/test-job-id/results/snapshot_m.json"},
+                ]
+            },
+            {
+                "Contents": [
+                    {"Key": "jobs/test-job-id/results/snapshot_z.json"},
+                ]
+            },
+        ]
+    )
+
+    buf = _io.BytesIO(json.dumps(payload).encode())
+
+    def fake_download_fileobj(bucket, key, fileobj):
+        assert key == "jobs/test-job-id/results/snapshot_z.json"
+        fileobj.write(buf.getvalue())
+
+    mock_s3.download_fileobj.side_effect = fake_download_fileobj
+
+    with patch("lean_runner._get_s3", return_value=mock_s3):
+        result = lean_runner.poll_live_results("test-job-id")
+
+    assert result == payload
+
+
+def test_poll_live_results_invalid_json():
+    """poll_live_results returns None when the JSON file is malformed."""
+    import io as _io
+
+    mock_s3 = MagicMock()
+    mock_s3.get_paginator.return_value = _make_paginator(
+        [{"Contents": [{"Key": "jobs/test-job-id/results/bad.json"}]}]
+    )
+
+    def fake_download_fileobj(bucket, key, fileobj):
+        fileobj.write(b"not valid json {{")
+
+    mock_s3.download_fileobj.side_effect = fake_download_fileobj
+
+    with patch("lean_runner._get_s3", return_value=mock_s3):
+        result = lean_runner.poll_live_results("test-job-id")
+
+    assert result is None
+
+
+def test_run_lean_backtest_job_failure():
+    """RuntimeError is raised when the K8s job fails."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_job = MagicMock()
+        mock_job.status.succeeded = 0
+        mock_job.status.failed = 1
+
+        mock_pod = MagicMock()
+        mock_pod.metadata.name = "lean-backtest-pod"
+
+        with patch("lean_runner.k8s_client.BatchV1Api") as mock_batch, patch(
+            "lean_runner.k8s_client.CoreV1Api"
+        ) as mock_core, patch("lean_runner.upload_job_inputs"):
+
+            mock_batch_api = MagicMock()
+            mock_batch.return_value = mock_batch_api
+            mock_batch_api.read_namespaced_job.return_value = mock_job
+
+            mock_core_api = MagicMock()
+            mock_core.return_value = mock_core_api
+            mock_core_api.list_namespaced_pod.return_value.items = [mock_pod]
+            mock_core_api.read_namespaced_pod_log.return_value = "LEAN fatal error"
+
+            with pytest.raises(RuntimeError, match="LEAN job failed"):
+                lean_runner.run_lean_backtest(
+                    "abcdef12-1234-1234-1234-123456789abc", tmpdir, timeout_seconds=60
+                )
+
+            mock_batch_api.delete_namespaced_job.assert_called_once()
+
+
+def test_live_pod_startup_timeout():
+    """RuntimeError is raised and job deleted when pod never reaches Running within 120s."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with patch("lean_runner.k8s_client.BatchV1Api") as mock_batch, patch(
+            "lean_runner.k8s_client.CoreV1Api"
+        ) as mock_core, patch("lean_runner.upload_job_inputs"), patch(
+            "lean_runner.time.sleep"
+        ):
+
+            mock_batch_api = MagicMock()
+            mock_batch.return_value = mock_batch_api
+
+            mock_core_api = MagicMock()
+            mock_core.return_value = mock_core_api
+            # Pod stuck in Pending — items list is always empty
+            mock_core_api.list_namespaced_pod.return_value.items = []
+
+            # Make time.time() exhaust the deadline immediately:
+            # first call (sets deadline) returns 0, second call (loop condition) returns 121
+            call_count = [0]
+
+            def fake_time():
+                call_count[0] += 1
+                return 0 if call_count[0] == 1 else 121
+
+            with patch("lean_runner.time.time", side_effect=fake_time):
+                with pytest.raises(RuntimeError, match="never reached Running"):
+                    lean_runner.run_lean_live(
+                        "abcdef12-1234-1234-1234-123456789abc", tmpdir
+                    )
+
+            mock_batch_api.delete_namespaced_job.assert_called_once()

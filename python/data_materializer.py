@@ -35,7 +35,9 @@ def _scale_price(price) -> int:
     return int(round(float(price) * 10000))
 
 
-def materialize_lean_csv(rows: list[dict], output_dir: str, symbol: str, resolution: str):
+def materialize_lean_csv(
+    rows: list[dict], output_dir: str, symbol: str, resolution: str
+):
     lean_resolution = RESOLUTION_MAP[resolution]
     symbol_lower = symbol.lower()
 
@@ -55,10 +57,10 @@ def materialize_lean_csv(rows: list[dict], output_dir: str, symbol: str, resolut
         lines = ["Milliseconds,Open,High,Low,Close,Volume"]
         for dt, row in date_rows:
             ms = _milliseconds_since_midnight(dt, resolution)
-            open_  = _scale_price(row["open"])
-            high   = _scale_price(row["high"])
-            low    = _scale_price(row["low"])
-            close  = _scale_price(row["close"])
+            open_ = _scale_price(row["open"])
+            high = _scale_price(row["high"])
+            low = _scale_price(row["low"])
+            close = _scale_price(row["close"])
             volume = int(row["volume"])
             lines.append(f"{ms},{open_},{high},{low},{close},{volume}")
 
@@ -70,6 +72,8 @@ def materialize_lean_csv(rows: list[dict], output_dir: str, symbol: str, resolut
             zf.writestr(csv_filename, csv_content)
 
 
-def materialize_all(rows_by_symbol: dict[str, list[dict]], output_dir: str, resolution: str):
+def materialize_all(
+    rows_by_symbol: dict[str, list[dict]], output_dir: str, resolution: str
+):
     for symbol, rows in rows_by_symbol.items():
         materialize_lean_csv(rows, output_dir, symbol, resolution)

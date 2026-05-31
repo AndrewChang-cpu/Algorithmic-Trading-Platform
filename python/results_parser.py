@@ -84,8 +84,7 @@ def parse_equity_curve(results: dict) -> list[dict]:
     Each value element is [unix_timestamp_seconds, open, high, low, close].
     """
     try:
-        values = (results["charts"]["Strategy Equity"]
-                        ["series"]["Equity"]["values"])
+        values = results["charts"]["Strategy Equity"]["series"]["Equity"]["values"]
     except (KeyError, TypeError):
         return []
 
@@ -94,11 +93,13 @@ def parse_equity_curve(results: dict) -> list[dict]:
         if len(v) < 5:
             continue
         ts, o, h, l, c = v[0], v[1], v[2], v[3], v[4]
-        points.append({
-            "time": datetime.fromtimestamp(ts, tz=timezone.utc),
-            "open": float(o),
-            "high": float(h),
-            "low": float(l),
-            "close": float(c),
-        })
+        points.append(
+            {
+                "time": datetime.fromtimestamp(ts, tz=timezone.utc),
+                "open": float(o),
+                "high": float(h),
+                "low": float(l),
+                "close": float(c),
+            }
+        )
     return points

@@ -37,3 +37,16 @@ RUN if [ -f /Lean/Data/symbol-properties/symbol-properties-database.csv ]; then 
     fi
 
 WORKDIR /Lean/Launcher
+
+RUN apt-get update && apt-get install -y --no-install-recommends awscli && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+RUN groupadd --gid 1001 lean && \
+    useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false lean && \
+    mkdir -p /lean/Results && \
+    chown -R lean:lean /lean /Lean/Launcher
+USER lean
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -79,7 +79,7 @@ export default function App() {
       if (e.data.type === 'token_refresh') {
         const { user } = useAuthStore.getState()
         if (user) {
-          useAuthStore.getState().setAuth(user, e.data.accessToken, e.data.refreshToken)
+          useAuthStore.getState().setAuth(user, e.data.accessToken)
         }
       }
     }

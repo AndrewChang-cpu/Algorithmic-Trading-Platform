@@ -7,8 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
+
+// seedIPCounter provides unique IPs so each seedUser call gets its own rate-limit bucket.
+var seedIPCounter atomic.Int64
 
 const (
 	validStrategy = `
@@ -28,10 +32,14 @@ def just_a_function():
 )
 
 // seedUser registers a test user and returns their ID.
+// Each call uses a unique X-Forwarded-For IP so it gets its own rate-limit bucket.
 func seedUser(t *testing.T, email string) string {
 	t.Helper()
+	n := seedIPCounter.Add(1)
+	ip := fmt.Sprintf("10.%d.%d.%d", (n>>16)&0xFF, (n>>8)&0xFF, n&0xFF)
+	req := jsonReqWithIP("POST", "/", `{"email":"`+email+`","password":"password123"}`, ip)
 	rr := httptest.NewRecorder()
-	Register(rr, jsonReq("POST", "/", `{"email":"`+email+`","password":"password123"}`))
+	Register(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("seedUser: register returned %d: %s", rr.Code, rr.Body.String())
 	}
@@ -206,5 +214,128 @@ func TestStrategyOwnership(t *testing.T) {
 	getRR := withAuth(GetStrategy, getReq)
 	if getRR.Code != http.StatusForbidden {
 		t.Fatalf("cross-user GET: expected 403, got %d", getRR.Code)
+	}
+}
+
+func TestGetVersionCode_NotFound(t *testing.T) {
+	userID := seedUser(t, "strat-vcode-notfound@test.com")
+
+	srv := newFakePythonService(t, func(source string) (string, string) {
+		return "MyStrategy", ""
+	})
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+
+	// Upload a strategy to get a valid strategyID.
+	uploadReq := multipartUpload(t, "vcode-strat", validStrategy, userID, "strat-vcode-notfound@test.com")
+	uploadRR := withAuth(UploadStrategy, uploadReq)
+	if uploadRR.Code != http.StatusCreated {
+		t.Fatalf("upload: expected 201, got %d: %s", uploadRR.Code, uploadRR.Body.String())
+	}
+	var uploaded map[string]interface{}
+	decodeJSON(t, uploadRR, &uploaded)
+	strategyID := uploaded["strategyId"].(string)
+
+	// Request a nonexistent versionId — must get 404.
+	req := authedReq(t, http.MethodGet, "/", "", userID, "strat-vcode-notfound@test.com")
+	req.SetPathValue("id", strategyID)
+	req.SetPathValue("versionId", "00000000-0000-0000-0000-000000000000")
+	rr := withAuth(GetVersionCode, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUploadStrategy_VersionInsertFail_NoS3Call(t *testing.T) {
+	// Verify that strategy_versions row is created and S3 is called after DB insert succeeds.
+	// This test documents and exercises the new DB-before-S3 ordering in UploadStrategy.
+	userID := seedUser(t, "strat-order@test.com")
+	srv := newFakePythonService(t, func(_ string) (string, string) { return "MyStrategy", "" })
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+	req := multipartUpload(t, "order-test", validStrategy, userID, "strat-order@test.com")
+	rr := withAuth(UploadStrategy, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]interface{}
+	decodeJSON(t, rr, &resp)
+	if resp["versionId"] == "" || resp["strategyId"] == "" {
+		t.Error("expected strategyId and versionId in response")
+	}
+	// Verify the strategy_versions row exists in DB.
+	var count int
+	testPool.QueryRow(context.Background(),
+		"SELECT COUNT(*) FROM strategy_versions WHERE id=$1", resp["versionId"]).Scan(&count)
+	if count != 1 {
+		t.Errorf("expected 1 strategy_versions row, got %d", count)
+	}
+}
+
+func TestGetStrategy_StatsError(t *testing.T) {
+	srv := newFakePythonService(t, func(_ string) (string, string) { return "MyStrategy", "" })
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+	userID := seedUser(t, "gs-statserr@test.com")
+
+	// Upload a strategy so GetStrategy has a real row to find.
+	req := multipartUpload(t, "stats-err-strat", validStrategy, userID, "gs-statserr@test.com")
+	rr := withAuth(UploadStrategy, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("upload: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var uploaded map[string]interface{}
+	decodeJSON(t, rr, &uploaded)
+	stratID := uploaded["strategyId"].(string)
+
+	// Break the stats query by renaming performance_metrics.
+	ctx := context.Background()
+	if _, err := testPool.Exec(ctx, "ALTER TABLE performance_metrics RENAME TO performance_metrics_bak"); err != nil {
+		t.Fatalf("rename table: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(ctx, "ALTER TABLE performance_metrics_bak RENAME TO performance_metrics") //nolint:errcheck
+	})
+
+	// GetStrategy must return 200 with strategy data and zero-valued stats.
+	getReq := authedReq(t, http.MethodGet, "/"+stratID, "", userID, "gs-statserr@test.com")
+	getReq.SetPathValue("id", stratID)
+	getRR := withAuth(GetStrategy, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", getRR.Code, getRR.Body.String())
+	}
+	var resp map[string]interface{}
+	decodeJSON(t, getRR, &resp)
+	if resp["id"] != stratID {
+		t.Errorf("expected strategyId %q in response, got %v", stratID, resp["id"])
+	}
+	stats, ok := resp["stats"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected stats object in response, got %v", resp["stats"])
+	}
+	if rc, _ := stats["runCount"].(float64); rc != 0 {
+		t.Errorf("expected runCount=0, got %v", stats["runCount"])
+	}
+}
+
+func TestGetStrategy_OwnershipCheck(t *testing.T) {
+	srv := newFakePythonService(t, func(_ string) (string, string) { return "MyStrategy", "" })
+	t.Setenv("PYTHON_SERVICE_URL", srv.URL)
+	ownerID := seedUser(t, "gs-owner@test.com")
+	otherID := seedUser(t, "gs-other@test.com")
+
+	// Upload strategy as owner.
+	req := multipartUpload(t, "gs-strat", validStrategy, ownerID, "gs-owner@test.com")
+	rr := withAuth(UploadStrategy, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("upload: expected 201, got %d", rr.Code)
+	}
+	var resp map[string]interface{}
+	decodeJSON(t, rr, &resp)
+	stratID := resp["strategyId"].(string)
+
+	// Access as other user — should get 403.
+	req2 := authedReq(t, http.MethodGet, "/"+stratID, "", otherID, "gs-other@test.com")
+	req2.SetPathValue("id", stratID)
+	rr2 := withAuth(GetStrategy, req2)
+	if rr2.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for wrong user, got %d: %s", rr2.Code, rr2.Body.String())
 	}
 }

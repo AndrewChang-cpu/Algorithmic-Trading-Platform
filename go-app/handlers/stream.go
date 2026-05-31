@@ -8,30 +8,48 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"application-server/db"
 	"application-server/middleware"
+	"application-server/queue"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
+var allowedOrigins []string
+
+// InitAllowedOrigins parses a comma-separated list of allowed origins and
+// stores them for use by the WebSocket upgrader's CheckOrigin function.
+// Call this once at startup before any WebSocket connections arrive.
+func InitAllowedOrigins(envVal string) {
+	if envVal == "" {
+		return
+	}
+	for _, o := range strings.Split(envVal, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			allowedOrigins = append(allowedOrigins, o)
+		}
+	}
+}
+
+var wsSemaphore sync.Map // key: userID, value: *int32
+const maxWSPerUser = 5
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
+		if len(allowedOrigins) == 0 {
+			return false // deny all when not configured
+		}
 		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		allowed := os.Getenv("CORS_ORIGINS")
-		if allowed == "" {
-			return true // dev mode: allow all
-		}
-		for _, o := range strings.Split(allowed, ",") {
-			if strings.TrimSpace(o) == origin {
+		for _, o := range allowedOrigins {
+			if o == origin {
 				return true
 			}
 		}
@@ -100,14 +118,27 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Disconnect pump: cancels ctx when client disconnects
+	go func() {
+		conn.ReadMessage() //nolint:errcheck
+		cancel()
+	}()
+
 	var lastLogID int
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	terminalStatuses := map[string]bool{"completed": true, "failed": true}
 
-	for range ticker.C {
-		ctx := context.Background()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 
 		// Send new log lines
 		rows, err := db.Pool.Query(ctx, `
@@ -135,6 +166,7 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 				}
 				data, _ := json.Marshal(msg)
 				if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					rows.Close() // prevent leak: this return bypasses the Close below
 					return
 				}
 			}
@@ -146,7 +178,7 @@ func JobStatusStream(w http.ResponseWriter, r *http.Request) {
 
 		// Send current status
 		var status string
-		db.Pool.QueryRow(ctx, "SELECT status FROM jobs WHERE id = $1", jobID).Scan(&status)
+		db.Pool.QueryRow(ctx, "SELECT status FROM jobs WHERE id = $1", jobID).Scan(&status) //nolint:errcheck
 		if status != "" {
 			msg := map[string]string{"type": "status", "status": status}
 			data, _ := json.Marshal(msg)
@@ -177,6 +209,15 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check per-user connection limit
+	counterVal, _ := wsSemaphore.LoadOrStore(userID, new(int32))
+	count := atomic.AddInt32(counterVal.(*int32), 1)
+	defer atomic.AddInt32(counterVal.(*int32), -1)
+	if count > maxWSPerUser {
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "too many connections")) //nolint:errcheck
+		return
+	}
+
 	// Verify job belongs to this user
 	var ownerID string
 	err = db.Pool.QueryRow(r.Context(), `
@@ -186,7 +227,7 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 		WHERE j.id = $1
 	`, jobID).Scan(&ownerID)
 	if err != nil || ownerID != userID {
-		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden"))
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "forbidden")) //nolint:errcheck
 		return
 	}
 
@@ -263,35 +304,13 @@ func PortfolioStream(w http.ResponseWriter, r *http.Request) {
 
 // HealthCheck handles GET /api/health
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
-	kafkaBrokers := os.Getenv("KAFKA_BOOTSTRAP_SERVERS")
-	if kafkaBrokers == "" {
-		kafkaBrokers = "localhost:9092"
+	// Redis liveness check (used by K8s readiness probe)
+	rdb := queue.GetClient()
+	pingCtx, cancel := context.WithTimeout(r.Context(), 100*time.Millisecond)
+	defer cancel()
+	if err := rdb.Ping(pingCtx).Err(); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "error"})
+		return
 	}
-
-	dbStatus := "ok"
-	if err := db.Pool.Ping(r.Context()); err != nil {
-		dbStatus = "down"
-	}
-
-	// Simple Kafka check via metadata request
-	kafkaStatus := "ok"
-	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBrokers})
-	if err != nil {
-		kafkaStatus = "down"
-	} else {
-		_, err = p.GetMetadata(nil, true, 2000)
-		if err != nil {
-			kafkaStatus = "down"
-		}
-		p.Close()
-	}
-
-	// Redis check — marked ok without a live ping to avoid circular imports
-	redisStatus := "ok"
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"kafka": kafkaStatus,
-		"redis": redisStatus,
-		"db":    dbStatus,
-	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

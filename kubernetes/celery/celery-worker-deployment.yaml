@@ -12,12 +12,47 @@ spec:
       labels:
         app: celery-worker
     spec:
+      serviceAccountName: lean-job-runner
       containers:
       - name: celery-worker
         image: 337909769295.dkr.ecr.us-east-1.amazonaws.com/atp/celery-worker:latest
         env:
         - name: CELERY_BROKER_URL
-          value: "redis://redis-service:6379/0"
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: REDIS_URL
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: DATABASE_URL
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_ACCESS_KEY
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_SECRET_KEY
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: S3_BUCKET
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: atp-core-credentials
+              key: REDIS_URL
+        - name: PYTHON_SERVICE_URL
+          value: "http://python-service:8082"
+        - name: GO_DATA_URL
+          value: "http://go-data-service:8081"
+        - name: K8S_NAMESPACE
+          value: "default"
         resources:
           requests:
             memory: "256Mi"
@@ -25,3 +60,9 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "1"
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL

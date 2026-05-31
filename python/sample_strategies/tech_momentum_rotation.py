@@ -34,7 +34,9 @@ class TechMomentumRotation(QCAlgorithm):
             self._indicators[symbol] = {
                 "ema_fast": self.ema(symbol, 10, Resolution.DAILY),
                 "ema_slow": self.ema(symbol, 30, Resolution.DAILY),
-                "rsi": self.rsi(symbol, 14, MovingAverageType.WILDERS, Resolution.DAILY),
+                "rsi": self.rsi(
+                    symbol, 14, MovingAverageType.WILDERS, Resolution.DAILY
+                ),
                 "momentum": self.momp(symbol, 20, Resolution.DAILY),
             }
 
@@ -70,7 +72,7 @@ class TechMomentumRotation(QCAlgorithm):
 
     def _rebalance(self, data: Slice):
         ranked = self._rank_by_momentum(data)
-        target_symbols = ranked[:self.MAX_POSITIONS]
+        target_symbols = ranked[: self.MAX_POSITIONS]
         target_weight = 1.0 / self.MAX_POSITIONS
 
         # Exit positions no longer in top-N or failing exit conditions
@@ -91,7 +93,9 @@ class TechMomentumRotation(QCAlgorithm):
             self.set_holdings(symbol, target_weight)
             price = self.securities[symbol].price
             self._trailing_stops[symbol] = price * 0.92
-            self.log(f"Entering {symbol.value} at {price:.2f}, stop at {self._trailing_stops[symbol]:.2f}")
+            self.log(
+                f"Entering {symbol.value} at {price:.2f}, stop at {self._trailing_stops[symbol]:.2f}"
+            )
 
     def _rank_by_momentum(self, data: Slice) -> list:
         scored = []
@@ -130,6 +134,10 @@ class TechMomentumRotation(QCAlgorithm):
         return rsi_val > 75 or ema_fast < ema_slow
 
     def on_end_of_algorithm(self):
-        invested = [s.value for s in self.portfolio.keys() if self.portfolio[s].invested]
+        invested = [
+            s.value for s in self.portfolio.keys() if self.portfolio[s].invested
+        ]
         self.log(f"Final portfolio: {invested}")
-        self.log(f"Total return: {(self.portfolio.total_portfolio_value / 100_000 - 1) * 100:.2f}%")
+        self.log(
+            f"Total return: {(self.portfolio.total_portfolio_value / 100_000 - 1) * 100:.2f}%"
+        )

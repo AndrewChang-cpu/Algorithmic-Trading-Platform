@@ -1,7 +1,59 @@
 import ast
 
-BLOCKED_MODULES = {"os", "subprocess", "socket", "sys", "shutil", "pathlib"}
-BLOCKED_BUILTINS = {"eval", "exec", "__import__", "compile"}
+# Security note: The AST scan is a first-line UX check, not a security boundary.
+# Docker container isolation (--network none / lean-live-net, --cap-drop ALL) is enforced separately.
+BLOCKED_MODULES = {
+    "os",
+    "subprocess",
+    "socket",
+    "sys",
+    "shutil",
+    "pathlib",
+    "importlib",
+    "importlib.util",
+    "importlib.machinery",
+    "ctypes",
+    "builtins",
+    "pickle",
+    "marshal",
+    "pty",
+    "urllib",
+    "requests",
+    "urllib3",
+    "http",
+    "http.client",
+    "ftplib",
+    "smtplib",
+    "threading",
+    "multiprocessing",
+    "concurrent",
+    "asyncio",
+}
+BLOCKED_BUILTINS = {
+    "eval",
+    "exec",
+    "__import__",
+    "compile",
+    "open",
+    "breakpoint",
+    "getattr",
+    "setattr",
+    "delattr",
+    "vars",
+    "globals",
+    "locals",
+    "dir",
+}
+BLOCKED_ATTRS = {
+    "__import__",
+    "__builtins__",
+    "__loader__",
+    "__class__",
+    "__subclasses__",
+    "__globals__",
+    "__dict__",
+    "__mro__",
+}
 
 
 def validate_strategy(source_code: str) -> dict:
@@ -15,18 +67,33 @@ def validate_strategy(source_code: str) -> dict:
             for alias in node.names:
                 for blocked in BLOCKED_MODULES:
                     if alias.name == blocked or alias.name.startswith(blocked + "."):
-                        return {"valid": False, "violation": f"import {blocked} detected on line {node.lineno}"}
+                        return {
+                            "valid": False,
+                            "violation": f"import {blocked} detected on line {node.lineno}",
+                        }
 
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 for blocked in BLOCKED_MODULES:
                     if node.module == blocked or node.module.startswith(blocked + "."):
-                        return {"valid": False, "violation": f"import {blocked} detected on line {node.lineno}"}
+                        return {
+                            "valid": False,
+                            "violation": f"import {blocked} detected on line {node.lineno}",
+                        }
 
         elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id in BLOCKED_BUILTINS:
                 name = node.func.id
-                return {"valid": False, "violation": f"import {name} detected on line {node.lineno}"}
+                return {
+                    "valid": False,
+                    "violation": f"use of blocked builtin '{name}' on line {node.lineno}",
+                }
+
+        if isinstance(node, ast.Attribute) and node.attr in BLOCKED_ATTRS:
+            return {
+                "valid": False,
+                "violation": f"use of blocked attribute '{node.attr}' on line {node.lineno}",
+            }
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
